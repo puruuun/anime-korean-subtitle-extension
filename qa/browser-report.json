@@ -1,0 +1,14 @@
+{
+  "browser": "msedge",
+  "tests": [
+    "Mode 1: KO search/download/apply, zero LLM calls",
+    "Mode 2: JA search → validated Korean translation → apply",
+    "Mode 3: English <track> → translation, no external provider search",
+    "Repeated translation reused IndexedDB with zero new LLM calls",
+    "Webpage DOM and content context cannot read API keys",
+    "Sync offset saved and applied",
+    "SPA EP1 → EP2 cancels old state and automatically applies new subtitles",
+    "Settings connection test lists configured local model"
+  ],
+  "passed": 8
+}
