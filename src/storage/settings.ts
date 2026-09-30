@@ -7,6 +7,9 @@ export interface Settings {
     apiKey: string;
     model: string;
     chunkSize: number;
+    initialChunkSize: number;
+    targetBufferSeconds: number;
+    immediatePlayback: boolean;
     maxCharacters: number;
     contextCues: number;
     temperature: number;
@@ -37,6 +40,9 @@ export const defaultSettings: Settings = {
     apiKey: '',
     model: '',
     chunkSize: 45,
+    initialChunkSize: 20,
+    targetBufferSeconds: 300,
+    immediatePlayback: false,
     maxCharacters: 5000,
     contextCues: 5,
     temperature: 0.2,
@@ -59,9 +65,7 @@ export const defaultSettings: Settings = {
   display: defaultDisplay,
   debug: false,
 };
-export async function getSettings(): Promise<Settings> {
-  const stored = await chrome.storage.local.get('settings');
-  const settings = stored.settings as Partial<Settings> | undefined;
+export function normalizeSettings(settings?: Partial<Settings>): Settings {
   return settings
     ? {
         ...defaultSettings,
@@ -78,14 +82,20 @@ export async function getSettings(): Promise<Settings> {
       }
     : structuredClone(defaultSettings);
 }
+export async function getSettings(): Promise<Settings> {
+  const stored = await chrome.storage.local.get('settings');
+  return normalizeSettings(stored.settings as Partial<Settings> | undefined);
+}
 export function validateSettings(s: Settings) {
   const u = new URL(s.translation.baseUrl);
   if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.search || u.hash)
     throw Error('Base URL 형식을 확인하세요.');
-  const t = s.translation;
+  const t = { ...defaultSettings.translation, ...s.translation };
   if (
     Object.values({
       chunkSize: t.chunkSize,
+      initialChunkSize: t.initialChunkSize,
+      targetBufferSeconds: t.targetBufferSeconds,
       maxCharacters: t.maxCharacters,
       contextCues: t.contextCues,
       temperature: t.temperature,
@@ -99,6 +109,13 @@ export function validateSettings(s: Settings) {
     !Number.isInteger(t.chunkSize) ||
     t.chunkSize < 1 ||
     t.chunkSize > 60 ||
+    !Number.isInteger(t.initialChunkSize) ||
+    t.initialChunkSize < 15 ||
+    t.initialChunkSize > 25 ||
+    !Number.isInteger(t.targetBufferSeconds) ||
+    t.targetBufferSeconds < 60 ||
+    t.targetBufferSeconds > 1800 ||
+    typeof t.immediatePlayback !== 'boolean' ||
     t.maxCharacters < 100 ||
     t.maxCharacters > 6000 ||
     t.contextCues < 0 ||
@@ -126,6 +143,7 @@ export function validateSettings(s: Settings) {
     throw Error('자막 표시 설정 범위를 확인하세요.');
 }
 export async function saveSettings(s: Settings) {
-  validateSettings(s);
-  await chrome.storage.local.set({ settings: s });
+  const settings = normalizeSettings(s);
+  validateSettings(settings);
+  await chrome.storage.local.set({ settings });
 }

@@ -15,7 +15,7 @@ import { extractSubtitle } from './archive';
 import { decodeSubtitle } from '../utils/encoding';
 import { parseSubtitle } from './SubtitleParser';
 import { AppError } from '../utils/errors';
-import { TranslationManager } from '../translation/TranslationManager';
+import { TranslationQueue, type TranslationBufferStatus } from '../translation/TranslationQueue';
 import { LMStudioProvider } from '../translation/lmstudio/LMStudioProvider';
 import { OpenAICompatibleProvider } from '../translation/openaiCompatible/OpenAICompatibleProvider';
 export type Mode = 'ko' | 'ja' | 'en' | 'auto';
@@ -26,6 +26,15 @@ export interface CoreStatus {
   path?: string;
   progress?: { done: number; total: number };
   warnings?: string[];
+  translation?: TranslationBufferStatus;
+}
+export interface ProgressiveHooks {
+  onStart: (
+    cues: SubtitleCue[],
+    language: 'ja' | 'en',
+    queue: TranslationQueue,
+  ) => void | Promise<void>;
+  onChunk: (cues: SubtitleCue[], snapshot: TranslationBufferStatus) => void | Promise<void>;
 }
 export class SelectionRequired extends AppError {
   constructor(
@@ -42,6 +51,7 @@ export class SubtitleCore {
     protected status: (s: CoreStatus) => void,
     protected signal: AbortSignal,
     protected embedded?: () => Promise<SubtitleSource[]>,
+    protected progressive?: ProgressiveHooks,
   ) {}
   protected async english(c: AnimeContext) {
     this.status({ stage: 'extract', message: '사이트 영문 자막 추출 중...' });
@@ -114,22 +124,36 @@ export class SubtitleCore {
     const { bytes, name } = extractSubtitle(buffer, c.episode);
     return parseSubtitle(decodeSubtitle(bytes, language), name.split('.').at(-1));
   }
-  protected translate(cues: SubtitleCue[], c: AnimeContext, language: 'ja' | 'en') {
+  protected async translate(cues: SubtitleCue[], c: AnimeContext, language: 'ja' | 'en') {
+    this.signal.throwIfAborted();
     const provider =
       this.settings.translation.provider === 'lmstudio'
         ? new LMStudioProvider(this.settings.translation)
         : new OpenAICompatibleProvider(this.settings.translation);
-    return new TranslationManager(provider, this.settings.translation).translate(
+    const queue = new TranslationQueue(provider, this.settings.translation);
+    await this.progressive?.onStart(cues, language, queue);
+    this.signal.throwIfAborted();
+    return queue.run(
       cues,
       c,
       language,
-      (done, total, cached) =>
-        this.status({
-          stage: 'translate',
-          message: cached ? '번역 캐시 사용' : '번역 ' + done + ' / ' + total,
-          progress: { done, total },
-          path: language === 'ja' ? '일본어 → 한국어' : '영어 → 한국어',
-        }),
+      {
+        onChunk: async (delta, snapshot) => {
+          this.signal.throwIfAborted();
+          await this.progressive?.onChunk(delta, snapshot);
+        },
+        onState: (snapshot) =>
+          this.status({
+            stage: 'translate',
+            message:
+              snapshot.completedChunks === 0
+                ? '첫 한국어 자막 준비 중...'
+                : '번역 중 · 준비된 자막부터 재생',
+            progress: { done: snapshot.completedChunks, total: snapshot.totalChunks },
+            path: language === 'ja' ? '일본어 → 한국어' : '영어 → 한국어',
+            translation: snapshot,
+          }),
+      },
       this.signal,
     );
   }

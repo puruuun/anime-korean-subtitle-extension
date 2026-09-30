@@ -1,6 +1,6 @@
 {
   "name": "anime-korean-subtitle",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:browser": "node scripts/browser-test.mjs",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "test:browser:progressive": "node scripts/browser-progressive.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.2",

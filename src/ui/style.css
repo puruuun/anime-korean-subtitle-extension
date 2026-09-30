@@ -343,3 +343,37 @@ select:focus-visible {
     font-size: 25px;
   }
 }
+
+.translation-buffer {
+  border-top: 1px solid #3b394e;
+  margin-top: 12px;
+  padding-top: 10px;
+}
+.translation-state {
+  color: #e8e1ff;
+  font-weight: 650;
+  margin: 0 0 8px;
+}
+.translation-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  margin: 0 0 8px;
+}
+.translation-metrics > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.translation-metrics dt {
+  color: #aaa6bf;
+  font-size: 11px;
+}
+.translation-metrics dd {
+  margin: 0;
+  color: #ebe7ff;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

@@ -6,6 +6,7 @@ import {
   contextChanged,
   syncFrame,
   updateOffset,
+  reportPlayback,
 } from './messageRouter';
 import { getSettings, saveSettings, validateSettings, type Settings } from '../storage/settings';
 import { setOffset } from '../storage/offsets';
@@ -30,7 +31,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     if (
       sender.tab?.id !== undefined &&
       sender.frameId !== undefined &&
-      ['FRAME_READY', 'CONTEXT_CHANGED', 'HEARTBEAT'].includes(m.type)
+      ['FRAME_READY', 'CONTEXT_CHANGED', 'HEARTBEAT', 'PLAYBACK_STATE'].includes(m.type)
     ) {
       const tabId = sender.tab.id;
       if (!(await supportedTab(tabId))) throw Error('지원 사이트가 아닙니다.');
@@ -41,6 +42,10 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
       }
       if (m.type === 'CONTEXT_CHANGED' && sender.frameId === 0) {
         await contextChanged(tabId);
+        return { ok: true };
+      }
+      if (m.type === 'PLAYBACK_STATE') {
+        await reportPlayback(tabId, sender, m);
         return { ok: true };
       }
       if (m.type === 'HEARTBEAT') return { ok: true };

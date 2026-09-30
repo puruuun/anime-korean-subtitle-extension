@@ -3,6 +3,7 @@ import { detectEmbedded } from './subtitleSources';
 import { findVideo } from './videoDetector';
 import { SubtitleRenderer, type DisplaySettings } from '../subtitle/SubtitleRenderer';
 import type { SubtitleCue } from '../subtitle/SubtitleCue';
+import type { TranslationBufferStatus } from '../translation/TranslationQueue';
 import { adapterFor } from '../sites/adapter';
 import { observeNavigation } from './navigationObserver';
 import { normalizeTitle } from '../anime/titleNormalizer';
@@ -20,20 +21,101 @@ if (!window.__animeSubIsolatedV1) {
     display: DisplaySettings | undefined,
     offset = 0,
     epoch = 0,
+    clearRevision = 0,
     lastIdentity = '',
     lastUrl = location.href,
     alive = true,
-    busy = false;
+    busy = false,
+    immediatePlayback = false,
+    translationStatus: TranslationBufferStatus | undefined,
+    translationStage: string | undefined,
+    translationMessage: string | undefined;
+  type Preparation = {
+    epoch: number;
+    video: HTMLVideoElement;
+    wasPlaying: boolean;
+    pausedByPreparation: boolean;
+    expectedPause: boolean;
+    userControlled: boolean;
+  };
+  let preparation: Preparation | undefined;
   const message = (m: unknown) => chrome.runtime.sendMessage(m).catch(() => null);
+  function reportPlayback(seek: boolean) {
+    if (!video || !Number.isFinite(video.currentTime)) return;
+    void message({
+      type: 'PLAYBACK_STATE',
+      epoch,
+      currentTime: video.currentTime,
+      playbackTime: video.currentTime,
+      seek,
+      paused: video.paused,
+    });
+  }
+  function finishPreparation(resume: boolean) {
+    const previous = preparation;
+    preparation = undefined;
+    if (
+      resume &&
+      previous &&
+      previous.video === video &&
+      previous.wasPlaying &&
+      previous.pausedByPreparation &&
+      !previous.userControlled &&
+      video?.paused
+    )
+      void video.play().catch(() => undefined);
+  }
+  function onVideoEvent(event: Event) {
+    if (preparation?.video === video) {
+      if (event.type === 'pause') {
+        if (preparation.expectedPause) preparation.expectedPause = false;
+        else preparation.userControlled = true;
+      } else if (event.type === 'play') {
+        preparation.expectedPause = false;
+        preparation.userControlled = true;
+      }
+    }
+    reportPlayback(event.type === 'seeking' || event.type === 'seeked');
+  }
+  const playbackEvents = ['seeking', 'seeked', 'play', 'pause', 'loadedmetadata'];
+  function resetPlayer(resume: boolean) {
+    clearRevision++;
+    finishPreparation(resume);
+    cues = [];
+    translationStatus = undefined;
+    translationStage = undefined;
+    translationMessage = undefined;
+    immediatePlayback = false;
+    renderer?.setCues([]);
+    renderer?.setImmediatePlayback(false);
+    renderer?.setTranslationStatus();
+  }
+  function acceptEpoch(value: unknown) {
+    const next = Number(value);
+    if (!Number.isSafeInteger(next) || next < epoch) return false;
+    if (next > epoch) {
+      resetPlayer(true);
+      epoch = next;
+    }
+    return true;
+  }
+  function configureRenderer() {
+    renderer?.setCues(cues);
+    renderer?.setOffset(offset);
+    renderer?.setImmediatePlayback(immediatePlayback);
+    renderer?.setTranslationStatus(translationStatus, translationStage, translationMessage);
+    if (display) renderer?.setDisplay(display);
+  }
   async function probe() {
     const next = findVideo();
     if (next !== video) {
+      finishPreparation(false);
+      if (video) for (const name of playbackEvents) video.removeEventListener(name, onVideoEvent);
       renderer?.destroy();
       video = next;
       renderer = video ? new SubtitleRenderer(video) : undefined;
-      renderer?.setCues(cues);
-      renderer?.setOffset(offset);
-      if (display) renderer?.setDisplay(display);
+      if (video) for (const name of playbackEvents) video.addEventListener(name, onVideoEvent);
+      configureRenderer();
     }
     const r = video?.getBoundingClientRect();
     await message({ type: 'FRAME_READY', hasVideo: !!video, area: r ? r.width * r.height : 0 });
@@ -42,6 +124,9 @@ if (!window.__animeSubIsolatedV1) {
     if (alive) void probe();
   }, 1500);
   void probe();
+  const playbackTimer = setInterval(() => {
+    if (alive && (busy || translationStatus)) reportPlayback(false);
+  }, 1000);
   const heartbeat = setInterval(() => {
     if (busy) void message({ type: 'HEARTBEAT' });
   }, 15000);
@@ -57,8 +142,7 @@ if (!window.__animeSubIsolatedV1) {
         normalizeTitle(context.title),
       ]);
       if (lastIdentity && identity !== lastIdentity) {
-        cues = [];
-        renderer?.setCues([]);
+        resetPlayer(true);
         clearBridge();
         busy = false;
         await message({ type: 'CONTEXT_CHANGED' });
@@ -66,8 +150,7 @@ if (!window.__animeSubIsolatedV1) {
       lastIdentity = identity;
     } catch {
       if (location.href !== lastUrl) {
-        cues = [];
-        renderer?.setCues([]);
+        resetPlayer(true);
         clearBridge();
         busy = false;
         await message({ type: 'CONTEXT_CHANGED' });
@@ -76,14 +159,18 @@ if (!window.__animeSubIsolatedV1) {
     }
     lastUrl = location.href;
   }
-  observeNavigation(() => {
+  const stopNavigation = observeNavigation(() => {
     void checkContext();
   });
   void checkContext();
   window.addEventListener('pagehide', () => {
     alive = false;
     clearInterval(probeTimer);
+    clearInterval(playbackTimer);
     clearInterval(heartbeat);
+    stopNavigation();
+    finishPreparation(false);
+    if (video) for (const name of playbackEvents) video.removeEventListener(name, onVideoEvent);
     renderer?.destroy();
   });
   window.addEventListener('pageshow', (event) => {
@@ -91,12 +178,26 @@ if (!window.__animeSubIsolatedV1) {
   });
   chrome.runtime.onMessage.addListener((m, _s, reply) => {
     if (m.type === 'BUSY') {
+      if (m.epoch !== undefined && !acceptEpoch(m.epoch)) {
+        reply({ ok: false });
+        return;
+      }
       busy = !!m.busy;
+      if (busy) reportPlayback(false);
+      else finishPreparation(true);
       reply({ ok: true });
     }
     if (m.type === 'FRAME_PROBE') {
       void probe().then(() => reply({ ok: true, video: !!video }));
       return true;
+    }
+    if (m.type === 'PLAYBACK') {
+      reply({
+        ok: !!video,
+        currentTime: video?.currentTime ?? 0,
+        playbackTime: video?.currentTime ?? 0,
+        paused: video?.paused ?? true,
+      });
     }
     if (m.type === 'SOURCES') {
       detectEmbedded().then(
@@ -117,22 +218,76 @@ if (!window.__animeSubIsolatedV1) {
       );
       return true;
     }
-    if (m.type === 'APPLY') {
-      if (Number(m.epoch) < epoch) {
+    if (m.type === 'PREPARE') {
+      if (!acceptEpoch(m.epoch)) {
         reply({ ok: false });
         return;
       }
-      epoch = m.epoch;
-      cues = m.cues;
-      display = m.display;
+      immediatePlayback = !!m.immediatePlayback;
+      renderer?.setImmediatePlayback(immediatePlayback);
+      if (!immediatePlayback && video && preparation?.epoch !== epoch) {
+        const wasPlaying = !video.paused;
+        preparation = {
+          epoch,
+          video,
+          wasPlaying,
+          pausedByPreparation: wasPlaying,
+          expectedPause: wasPlaying,
+          userControlled: false,
+        };
+        if (wasPlaying) video.pause();
+      }
+      reply({ ok: !!video });
+    }
+    if (m.type === 'BOOTSTRAP_READY') {
+      if (!acceptEpoch(m.epoch)) {
+        reply({ ok: false });
+        return;
+      }
+      finishPreparation(true);
+      reply({ ok: !!video });
+    }
+    if (m.type === 'APPLY' || m.type === 'APPEND') {
+      if (!acceptEpoch(m.epoch)) {
+        reply({ ok: false });
+        return;
+      }
+      const appliedEpoch = epoch;
+      const appliedRevision = clearRevision;
+      if (m.type === 'APPLY') cues = [...m.cues];
+      else {
+        const store = new Map(cues.map((cue) => [cue.id, cue]));
+        for (const cue of m.cues as SubtitleCue[]) store.set(cue.id, cue);
+        cues = [...store.values()].sort((a, b) => a.startTime - b.startTime || a.id - b.id);
+      }
+      display = m.display ?? display;
       offset = m.offset ?? offset;
+      if (typeof m.immediatePlayback === 'boolean') immediatePlayback = m.immediatePlayback;
+      if (m.bootstrapReady) finishPreparation(true);
       void probe().then(() => {
-        renderer?.setCues(cues);
+        if (!alive || appliedEpoch !== epoch || appliedRevision !== clearRevision) {
+          reply({ ok: false });
+          return;
+        }
+        if (m.type === 'APPEND') renderer?.addCues(m.cues);
+        else renderer?.setCues(cues);
         renderer?.setOffset(offset);
+        renderer?.setImmediatePlayback(immediatePlayback);
         if (display) renderer?.setDisplay(display);
         reply({ ok: !!video });
       });
       return true;
+    }
+    if (m.type === 'TRANSLATION_STATUS') {
+      if (!acceptEpoch(m.epoch)) {
+        reply({ ok: false });
+        return;
+      }
+      translationStatus = m.translation;
+      translationStage = m.stage;
+      translationMessage = m.message;
+      renderer?.setTranslationStatus(translationStatus, translationStage, translationMessage);
+      reply({ ok: !!video });
     }
     if (m.type === 'OFFSET') {
       offset = m.offset;
@@ -145,11 +300,7 @@ if (!window.__animeSubIsolatedV1) {
       reply({ ok: true });
     }
     if (m.type === 'CLEAR') {
-      if (Number(m.epoch) >= epoch) {
-        epoch = m.epoch;
-        cues = [];
-        renderer?.setCues([]);
-      }
+      if (acceptEpoch(m.epoch)) resetPlayer(true);
       reply({ ok: true });
     }
     if (m.type === 'DEMO') {

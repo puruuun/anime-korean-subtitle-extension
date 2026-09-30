@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import type { AnimeContext } from '../../anime/AnimeContext';
 import type { JobStatus } from '../../background/messageRouter';
 import type { Mode } from '../../subtitle/SubtitleCore';
+import type { TranslationBufferStatus } from '../../translation/TranslationQueue';
 import { send, originPattern } from '../api';
 import '../style.css';
 const modes: { id: Mode; name: string; detail: string }[] = [
@@ -11,6 +12,70 @@ const modes: { id: Mode; name: string; detail: string }[] = [
   { id: 'en', name: '사이트 영어 자막 → 한국어', detail: '플레이어의 영어 자막을 AI로 번역' },
   { id: 'auto', name: '자동 선택', detail: '한국어 → 일본어 → 사이트 영어' },
 ];
+function clockTime(seconds: number): string {
+  const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remaining = String(total % 60).padStart(2, '0');
+  return hours
+    ? hours + ':' + String(minutes).padStart(2, '0') + ':' + remaining
+    : String(minutes).padStart(2, '0') + ':' + remaining;
+}
+function bufferTime(seconds: number): string {
+  const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
+  return Math.floor(total / 60) + 'm ' + (total % 60) + 's';
+}
+function TranslationStatus({
+  translation,
+  busy,
+}: {
+  translation: TranslationBufferStatus;
+  busy: boolean;
+}) {
+  const pendingChunks = translation.chunks.filter((chunk) => chunk.state === 'pending').length;
+  const activeChunks = translation.chunks.filter((chunk) => chunk.state === 'translating').length;
+  const state = busy
+    ? '번역 중'
+    : translation.failedChunks > 0
+      ? '일부 번역 실패'
+      : translation.completedChunks === translation.totalChunks
+        ? '번역 완료'
+        : '번역 중단';
+  return (
+    <div className="translation-buffer" aria-label="번역 Buffer 상태">
+      <p className="translation-state">번역 상태: {state}</p>
+      <dl className="translation-metrics">
+        <div>
+          <dt>현재 재생</dt>
+          <dd>{clockTime(translation.playbackTime)}</dd>
+        </div>
+        <div>
+          <dt>번역 완료</dt>
+          <dd>{clockTime(translation.translatedUntil)}</dd>
+        </div>
+        <div>
+          <dt>Buffer</dt>
+          <dd>{bufferTime(translation.bufferSeconds)}</dd>
+        </div>
+        <div>
+          <dt>목표 Buffer</dt>
+          <dd>{bufferTime(translation.targetBufferSeconds)}</dd>
+        </div>
+      </dl>
+      <small>
+        Chunk {translation.completedChunks}/{translation.totalChunks} 완료 · 대기 {pendingChunks} ·
+        진행 {activeChunks}
+      </small>
+      <small>번역 완료 시각은 현재 위치부터 연속으로 준비된 구간입니다.</small>
+      {translation.failedChunks > 0 && (
+        <small className="error">
+          {translation.failedChunks}개 Chunk 번역 실패 · 완료된 자막은 계속 표시됩니다. 다시
+          적용하면 실패한 구간을 다시 번역합니다.
+        </small>
+      )}
+    </div>
+  );
+}
 function Popup() {
   const [tabId, setTabId] = useState<number>();
   const [context, setContext] = useState<AnimeContext>();
@@ -241,6 +306,9 @@ function Popup() {
         {status?.message || '모드를 선택하고 한국어 자막을 적용하세요.'}
         {status?.path && <small>현재 경로 · {status.path}</small>}
         {status?.progress && <progress value={status.progress.done} max={status.progress.total} />}
+        {status?.translation && (
+          <TranslationStatus translation={status.translation} busy={!!status.busy} />
+        )}
       </div>
       {error && (
         <p className="error" role="alert">

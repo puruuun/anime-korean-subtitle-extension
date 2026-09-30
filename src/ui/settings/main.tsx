@@ -261,7 +261,9 @@ function SettingsPage() {
         <div className="grid">
           {(
             [
-              { key: 'chunkSize', label: 'Chunk Size (Cue)', min: 1, max: 60 },
+              { key: 'initialChunkSize', label: '첫 Chunk 크기 (Cue)', min: 15, max: 25 },
+              { key: 'chunkSize', label: '이후 Chunk 크기 (Cue)', min: 1, max: 60 },
+              { key: 'targetBufferSeconds', label: '목표 번역 Buffer (초)', min: 60, max: 1800 },
               { key: 'maxCharacters', label: '최대 문자 수', min: 100, max: 6000 },
               { key: 'contextCues', label: '이전 Context Cue', min: 0, max: 20 },
               { key: 'temperature', label: 'Temperature', min: 0, max: 2, step: 0.1 },
@@ -282,6 +284,22 @@ function SettingsPage() {
             </label>
           ))}
         </div>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={t.immediatePlayback}
+            onChange={(e) => translation('immediatePlayback', e.target.checked)}
+          />
+          즉시 재생 모드
+        </label>
+        <p className="muted">
+          기본 모드는 첫 작은 Chunk의 한국어 자막만 준비한 뒤 재생합니다. 즉시 재생 모드는 영어
+          자막으로 먼저 재생하고, 첫 한국어 Chunk가 준비되면 자동으로 전환합니다.
+        </p>
+        <p className="muted">
+          이후 Chunk는 재생 중 계속 번역합니다. 목표 Buffer는 현재 위치보다 앞서 준비할 번역
+          구간이며, 기본값은 300초입니다. 서버 속도에 따라 일시적으로 부족할 수 있습니다.
+        </p>
         <hr />
         <div className="grid">
           {(

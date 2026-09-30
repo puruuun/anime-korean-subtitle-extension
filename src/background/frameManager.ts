@@ -110,6 +110,17 @@ export async function applyCues(
   if (!results.some((r) => r.status === 'fulfilled' && r.value?.ok))
     throw new AppError('VIDEO', '영상 프레임에 자막을 전달하지 못했습니다.');
 }
+export async function sendVideoMessage(tabId: number, message: Record<string, unknown>) {
+  const frames = await videoFrames(tabId).catch(() => []);
+  return Promise.allSettled(
+    frames.map((f) =>
+      chrome.tabs.sendMessage(tabId, message, {
+        frameId: f.frameId,
+        ...(f.documentId ? { documentId: f.documentId } : {}),
+      }),
+    ),
+  );
+}
 export async function clearFrames(tabId: number, epoch: number) {
   try {
     const frames = await frameInventory(tabId);

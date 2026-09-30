@@ -138,3 +138,33 @@ ASS는 start / end / plain text 중심이며 고급 style은 보존하지 않습
 ## 작업 환경 문제
 
 초기 Documents outputs 저장은 Windows 제어된 폴더 액세스(Defender 이벤트 1123)에 의해 차단됐습니다. 허용된 별도 작업 폴더에서 구현·검증했고, 사용자가 PowerShell의 폴더 접근을 허용한 뒤 지정된 outputs로 최종 결과물을 복사했습니다.
+
+## v0.2.0 Progressive / background translation
+
+- SubtitleCore는 전체 원본 Cue를 파싱한 뒤 TranslationQueue에 전달합니다. 예전 TranslationManager는 기존 캐시 형식과 검증을 위한 호환 코드이며 실제 플레이어 번역은 새 Queue를 사용합니다.
+- 첫 Chunk 기본20 Cue / 이후 기본45 Cue, 문자 수 제한 유지. Queue는 하나의 API 요청만 진행하고 완료 Delta를 기다리는 Renderer와 독립적으로 작업합니다.
+- 새 Chunk 캐시는 원본 작품·회차·언어·시간/ID·모델·endpoint·prompt·Chunk·초기 Chunk·원본 Context로 결정됩니다. 다른 Chunk의 번역 결과나 실행 순서에 의존하지 않습니다.
+- seek의 우선순위 취소는 pending으로 복귀하며 실패 재시도와 구분합니다. API 응답이 이미 검증됐으면 IndexedDB 저장 중 seek가 발생해도 유용한 완료 결과를 버리지 않습니다.
+- 버퍼는 현재 위치 뒤 첫 미번역 Cue까지의 연속 구간으로 계산합니다. 대사가 없는 간격은 포함하고, 미번역 구간 건너편의 완료 자막은 포함하지 않습니다.
+- 전체 회차가 완료됐던 이전 캐시를 검증하고 새 Chunk 캐시로 옮깁니다. 캐시 훼손은 해당 항목의 miss로 처리합니다.
+- 탭별 시작/취소 직렬화, SPA 재시작 타이머 중복 제거, frame/document/epoch 검증, BUSY·APPEND·CLEAR epoch 검증을 통해 이전 회차의 작업이 새 회차를 지우지 않도록 합니다.
+- 첫 Chunk만 기다리는 일시정지와 원래 사용자의 일시정지 의도를 구분합니다. 초기 실패·취소에도 번역 때문에 영상이 영구 일시정지되지 않게 합니다.
+- 기존 영어 TextTrack을 실제로 숨긴 경우에만 복원 대상을 기록합니다. 나중에 사용자가 바꾼 자막 선택을 초기 상태로 덮어쓰지 않습니다.
+
+최종 단위 테스트 59개와 브라우저 검사 22개(기존13 + Progressive9)가 통과했습니다.
+
+Progressive 실제 MV3 브라우저 검사: scripts/browser-progressive.mjs / qa/progressive-report.json.
+
+1. 첫 요청20 Cue만 전송 / 첫 Chunk 동안만 초기 대기.
+2. 뒤 요청을 일부러 지연해도 첫20 Cue가 이미 표시되고 재생이 이어짐.
+3. Popup 현재 시각·연속 번역 위치·Buffer·300초 목표 표시.
+4. 18분 seek 시 불필요한 HTTP 요청 취소와 새 구간 우선 처리.
+5. 전체140 Cue의 원래 ID와 시작·종료 시간 유지.
+6. 회차 재실행에서 LLM 호출0회.
+7. 즉시 재생에서 기존 영어를 유지하다 한국어가 준비되면 전환.
+8. SPA 다음 회차에서 이전 HTTP 요청 취소와 새 epoch.
+9. 실패한 Chunk만 재시도 / 다른95 Cue 사용 / 재실행 시 빠진45 Cue만 요청.
+
+추가 단위 검증은 Cache 복원, legacy 전체 캐시 이행과 훼손, Buffer의 구간 누락, 순서 변경, 첫 준비·사용자 pause 의도, 지연된 APPEND/CLEAR 경합, 기존 자막 선택 복원, 탭별 동시 시작·취소, 취소 후 이전 worker의 표시 복원을 검사합니다.
+
+300초는 모델 속도·대사 밀도·seek에 영향을 받는 목표로 관리하며 실제 Buffer를 표시합니다. 실제 LM Studio 모델의 처리 속도와 실제 사이트의 독자 자막 엔진은 사용자 환경에서 확인해야 합니다.

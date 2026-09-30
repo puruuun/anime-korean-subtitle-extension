@@ -1,0 +1,136 @@
+{
+  "browser": "msedge",
+  "passed": 9,
+  "tests": [
+    "Initial request contains only 20 cues; normal playback waits only for the small initial chunk",
+    "First 20 translated cues are registered and playback resumes while later translation remains pending",
+    "Popup displays current playback, continuous translated horizon, buffer and the five-minute target",
+    "Seeking to 18 minutes aborts the unrelated chunk and prioritizes the chunk covering the new position",
+    "Background queue finishes the whole episode with original cue IDs and times preserved",
+    "A repeated episode restores all chunk caches without any new LLM requests",
+    "Immediate mode keeps video playing and source English visible until the first Korean chunk becomes available",
+    "SPA episode change aborts the previous request, advances the epoch and starts a fresh episode queue",
+    "Only the failed chunk retries; other chunks remain usable and a rerun restores caches before retrying the missing chunk"
+  ],
+  "requests": [
+    {
+      "phase": "normal",
+      "model": "progressive-normal",
+      "firstCue": 1,
+      "cueCount": 20,
+      "aborted": false
+    },
+    {
+      "phase": "normal",
+      "model": "progressive-normal",
+      "firstCue": 21,
+      "cueCount": 45,
+      "aborted": true
+    },
+    {
+      "phase": "normal",
+      "model": "progressive-normal",
+      "firstCue": 66,
+      "cueCount": 45,
+      "aborted": false
+    },
+    {
+      "phase": "normal",
+      "model": "progressive-normal",
+      "firstCue": 111,
+      "cueCount": 30,
+      "aborted": false
+    },
+    {
+      "phase": "normal",
+      "model": "progressive-normal",
+      "firstCue": 21,
+      "cueCount": 45,
+      "aborted": false
+    },
+    {
+      "phase": "immediate",
+      "model": "progressive-immediate",
+      "firstCue": 1,
+      "cueCount": 20,
+      "aborted": false
+    },
+    {
+      "phase": "immediate",
+      "model": "progressive-immediate",
+      "firstCue": 21,
+      "cueCount": 45,
+      "aborted": true
+    },
+    {
+      "phase": "spa",
+      "model": "progressive-immediate",
+      "firstCue": 1,
+      "cueCount": 20,
+      "aborted": false
+    },
+    {
+      "phase": "spa",
+      "model": "progressive-immediate",
+      "firstCue": 21,
+      "cueCount": 45,
+      "aborted": false
+    },
+    {
+      "phase": "spa",
+      "model": "progressive-immediate",
+      "firstCue": 66,
+      "cueCount": 45,
+      "aborted": false
+    },
+    {
+      "phase": "spa",
+      "model": "progressive-immediate",
+      "firstCue": 111,
+      "cueCount": 30,
+      "aborted": false
+    },
+    {
+      "phase": "failure",
+      "model": "progressive-failure",
+      "firstCue": 1,
+      "cueCount": 20,
+      "aborted": false
+    },
+    {
+      "phase": "failure",
+      "model": "progressive-failure",
+      "firstCue": 21,
+      "cueCount": 45,
+      "aborted": false
+    },
+    {
+      "phase": "failure",
+      "model": "progressive-failure",
+      "firstCue": 21,
+      "cueCount": 45,
+      "aborted": false
+    },
+    {
+      "phase": "failure",
+      "model": "progressive-failure",
+      "firstCue": 66,
+      "cueCount": 45,
+      "aborted": false
+    },
+    {
+      "phase": "failure",
+      "model": "progressive-failure",
+      "firstCue": 111,
+      "cueCount": 30,
+      "aborted": false
+    },
+    {
+      "phase": "failure-retry",
+      "model": "progressive-failure",
+      "firstCue": 21,
+      "cueCount": 45,
+      "aborted": false
+    }
+  ]
+}
