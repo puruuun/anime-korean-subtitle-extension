@@ -8,9 +8,8 @@ import { send, originPattern } from '../api';
 import '../style.css';
 const modes: { id: Mode; name: string; detail: string }[] = [
   { id: 'ko', name: '한국어 자막 검색', detail: '외부 한국어 자막을 그대로 적용' },
-  { id: 'ja', name: '일본어 자막 → 한국어', detail: '외부 일본어 자막을 AI로 번역' },
-  { id: 'en', name: '사이트 영어 자막 → 한국어', detail: '플레이어의 영어 자막을 AI로 번역' },
-  { id: 'auto', name: '자동 선택', detail: '한국어 → 일본어 → 사이트 영어' },
+  { id: 'ja', name: '일본어 자막 검색 → 한국어 번역', detail: '외부 일본어 자막을 AI로 번역' },
+  { id: 'en', name: '사이트 영어 자막 → 한국어 번역', detail: '플레이어의 영어 자막을 AI로 번역' },
 ];
 function clockTime(seconds: number): string {
   const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
@@ -79,7 +78,7 @@ function TranslationStatus({
 function Popup() {
   const [tabId, setTabId] = useState<number>();
   const [context, setContext] = useState<AnimeContext>();
-  const [mode, setMode] = useState<Mode>('ko');
+  const [mode, setMode] = useState<Mode>('auto');
   const [status, setStatus] = useState<JobStatus>();
   const [error, setError] = useState('');
   const [edit, setEdit] = useState(false);
@@ -111,6 +110,8 @@ function Popup() {
         const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!t.id) throw Error('활성 탭이 없습니다.');
         setTabId(t.id);
+        const preferences = await send<{ mode: Mode }>({ type: 'GET_PREFERENCES' });
+        setMode(preferences.mode);
         const contextResult = await chrome.tabs
           .sendMessage(t.id, { type: 'CONTEXT' }, { frameId: 0 })
           .catch(() => null);
@@ -189,6 +190,7 @@ function Popup() {
                   englishTitle: undefined,
                   romajiTitle: undefined,
                   nativeTitle: undefined,
+                  koreanTitle: undefined,
                   synonyms: undefined,
                 }
               : {}),
@@ -287,22 +289,49 @@ function Popup() {
           </>
         )}
       </section>
-      <p className="label-heading">자막 모드</p>
-      {modes.map((m) => (
-        <label className="mode" key={m.id}>
-          <input
-            name="mode"
-            type="radio"
-            checked={mode === m.id}
-            disabled={busy}
-            onChange={() => setMode(m.id)}
-          />
-          <span>
-            <strong>{m.name}</strong>
-            <small>{m.detail}</small>
-          </span>
-        </label>
-      ))}
+      <p className="label-heading">한국어 자막</p>
+      <div className="row">
+        {(
+          [
+            { id: 'auto', name: '자동' },
+            { id: 'manual', name: '수동' },
+          ] as const
+        ).map((option) => (
+          <label className="mode" key={option.id}>
+            <input
+              name="selection"
+              type="radio"
+              disabled={busy}
+              checked={option.id === 'auto' ? mode === 'auto' : mode !== 'auto'}
+              onChange={() => {
+                const next = option.id === 'auto' ? 'auto' : 'ko';
+                setMode(next);
+                void send({ type: 'SET_MODE', mode: next }).catch((e) => setError(e.message));
+              }}
+            />
+            <strong>{option.name}</strong>
+          </label>
+        ))}
+      </div>
+      {mode !== 'auto' &&
+        modes.map((m) => (
+          <label className="mode" key={m.id}>
+            <input
+              name="mode"
+              type="radio"
+              checked={mode === m.id}
+              disabled={busy}
+              onChange={() => {
+                setMode(m.id);
+                void send({ type: 'SET_MODE', mode: m.id }).catch((e) => setError(e.message));
+              }}
+            />
+            <span>
+              <strong>{m.name}</strong>
+              <small>{m.detail}</small>
+            </span>
+          </label>
+        ))}
       <button className="primary full" disabled={busy || !context} onClick={() => void run()}>
         한국어 자막 적용
       </button>
@@ -312,15 +341,14 @@ function Popup() {
         aria-live="polite"
       >
         <span className="status-dot" />
-        {status?.message || '모드를 선택하고 한국어 자막을 적용하세요.'}
+        {status?.message ||
+          '자막: ' +
+            (mode === 'auto' ? '자동 · 회차를 열면 준비합니다.' : '수동 · 자막을 적용하세요.')}
         {status?.path && <small>현재 경로 · {status.path}</small>}
         {status?.progress && <progress value={status.progress.done} max={status.progress.total} />}
         {status?.translation && (
           <TranslationStatus translation={status.translation} busy={!!status.busy} />
         )}
-        {status?.warnings?.map((warning) => (
-          <small key={warning}>{warning} · 다음 Provider로 계속 검색</small>
-        ))}
       </div>
       {error && (
         <p className="error" role="alert">

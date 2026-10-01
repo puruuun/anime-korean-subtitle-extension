@@ -1,14 +1,30 @@
 {
-  "browser": "msedge",
+  "browser": "Chromium isolated MV3",
+  "passed": 17,
   "tests": [
-    "Mode 1: KO search/download/apply, zero LLM calls",
-    "Mode 2: JA search → validated Korean translation → apply",
-    "Mode 3: English <track> → translation, no external provider search",
-    "Repeated translation reused IndexedDB with zero new LLM calls",
-    "Webpage DOM and content context cannot read API keys",
-    "Sync offset saved and applied",
-    "SPA EP1 → EP2 cancels old state and automatically applies new subtitles",
-    "Settings connection test lists configured local model"
+    "A: initial video page starts AUTO, Anissia applies directly, zero Japanese/LLM calls",
+    "B: unresolved Anissia page falls through to Jimaku JA → local Korean translation",
+    "C: no Jimaku key makes zero Jimaku HTTP requests and uses Kitsunekko",
+    "D: Jimaku 500 automatically uses Kitsunekko",
+    "Jimaku candidate with an invalid subtitle file falls through to Kitsunekko",
+    "E: Japanese episode mismatch falls through to embedded English",
+    "F: Manual Korean uses only Anissia",
+    "G: Manual Japanese uses only Jimaku → Kitsunekko",
+    "H: Manual English never searches external sources",
+    "Repeated progressive translation reuses IndexedDB without LLM calls",
+    "Gemini JA translation uses the same progressive queue with validated JSON",
+    "Gemini EN translation uses its English prompt and shared queue",
+    "J: legacy settings migrated without obsolete provider credentials",
+    "Page MAIN/isolated contexts cannot read API key storage",
+    "Episode subtitle sync remains functional",
+    "User cancellation suppresses automatic FRAME_READY restart",
+    "Popup has Auto/Manual and exactly three independent manual choices"
   ],
-  "passed": 8
+  "llmCalls": 7,
+  "geminiCalls": 2,
+  "counts": {
+    "anissia": 80,
+    "jimaku": 9,
+    "kitsunekko": 10
+  }
 }

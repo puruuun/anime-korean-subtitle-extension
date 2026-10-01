@@ -2,19 +2,20 @@
   "manifest_version": 3,
   "name": "Anime Korean Subtitle",
   "description": "Miruro / Re:ANIME 외부 자막 검색 및 텍스트 기반 한국어 번역",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "minimum_chrome_version": "120",
-  "permissions": ["storage", "scripting", "activeTab", "webNavigation", "alarms"],
+  "permissions": ["storage", "scripting", "activeTab", "webNavigation"],
   "host_permissions": [
     "https://*.miruro.to/*",
     "https://reanime.to/*",
-    "https://api.subdl.com/*",
     "https://api.anissia.net/*",
-    "https://dl.subdl.com/*",
-    "https://*.opensubtitles.com/*",
     "https://graphql.anilist.co/*",
     "http://127.0.0.1/*",
-    "http://localhost/*"
+    "http://localhost/*",
+    "https://jimaku.cc/*",
+    "https://subtitles.ajatt.top/*",
+    "https://raw.githubusercontent.com/Ajatt-Tools/kitsunekko-mirror/*",
+    "https://generativelanguage.googleapis.com/*"
   ],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "background": {

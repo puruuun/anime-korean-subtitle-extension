@@ -20,16 +20,19 @@ export async function translationKey(
   source: string,
   language: 'ja' | 'en',
   s: Settings['translation'],
+  sourceId = language === 'en' ? 'embedded-en' : 'external-ja',
 ) {
   return subtitleHash(
     JSON.stringify({
       context: contextKey(c),
       sourceHash: await subtitleHash(source),
       sourceLanguage: language,
+      sourceId,
       targetLanguage: 'ko',
       provider: s.provider,
-      endpoint: s.baseUrl,
-      model: s.model,
+      endpoint:
+        s.provider === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta' : s.baseUrl,
+      model: s.provider === 'gemini' ? s.geminiModel : s.model,
       prompt: PROMPT_VERSION,
       temperature: s.temperature,
       chunkSize: s.chunkSize,

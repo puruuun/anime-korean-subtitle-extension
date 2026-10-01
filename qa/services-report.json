@@ -1,0 +1,39 @@
+{
+  "checkedAt": "2026-10-01T08:40:33.437Z",
+  "services": [
+    {
+      "service": "anissia",
+      "result": "ok",
+      "scheduleEnvelope": "ok",
+      "scheduleCount": 28,
+      "animeNo": 2791,
+      "captionEnvelope": "ok",
+      "captionFields": ["episode", "updDt", "website", "name"]
+    },
+    {
+      "service": "jimaku",
+      "result": "schema verified; authenticated requests not tested",
+      "noKeyStatus": 401,
+      "auth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization"
+      },
+      "endpoints": ["/api/entries/{id}/files", "/api/entries/search"]
+    },
+    {
+      "service": "kitsunekko",
+      "result": "live catalog, detail, EP07 subtitle downloaded",
+      "indexBytes": 3549809,
+      "entryRows": 5017,
+      "fileUrl": "https://raw.githubusercontent.com/Ajatt-Tools/kitsunekko-mirror/refs/heads/main/subtitles/anime_tv/Sousou%20no%20Frieren/%5BSubsPlease%5D%20Sousou%20no%20Frieren%20-%2007%20%281080p%29%20%5B24356E19%5D%20ja.srt",
+      "sampleBytes": 17513,
+      "hasSrtTimecodes": true
+    },
+    {
+      "service": "gemini",
+      "result": "official REST schema verified; no real model call",
+      "jsonSchemaField": true
+    }
+  ]
+}

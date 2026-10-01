@@ -8,7 +8,7 @@ import {
   type SubtitleResource,
 } from './resourceLoader';
 import { AppError } from '../../utils/errors';
-import { normalizeEpisode, episodeFromSubtitleName } from '../../anime/episodeNormalizer';
+import { normalizeEpisode, filenameEpisode } from '../../anime/episodeNormalizer';
 
 export class SubtitleLinkResolverChain {
   constructor(
@@ -36,8 +36,13 @@ export class SubtitleLinkResolverChain {
         const result = await resolver.resolve(resource, context);
         signal?.throwIfAborted();
         if (result?.kind === 'file') {
-          const fileEpisode = episodeFromSubtitleName(result.name);
-          if (fileEpisode !== undefined && fileEpisode !== normalizeEpisode(candidate.episode))
+          const parsed = filenameEpisode(result.name);
+          if (
+            parsed &&
+            (parsed.episode !== normalizeEpisode(candidate.episode) ||
+              parsed.special !== candidate.episodeType ||
+              (parsed.season !== undefined && parsed.season !== (candidate.season ?? 1)))
+          )
             return {
               kind: 'page',
               pageUrl,

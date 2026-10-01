@@ -21,21 +21,6 @@ function SettingsPage() {
   ) {
     setS({ ...s, translation: { ...s.translation, [key]: value } });
   }
-  function subdl<K extends keyof Settings['providers']['subdl']>(
-    key: K,
-    value: Settings['providers']['subdl'][K],
-  ) {
-    setS({ ...s, providers: { ...s.providers, subdl: { ...s.providers.subdl, [key]: value } } });
-  }
-  function opensubtitles<K extends keyof Settings['providers']['opensubtitles']>(
-    key: K,
-    value: Settings['providers']['opensubtitles'][K],
-  ) {
-    setS({
-      ...s,
-      providers: { ...s.providers, opensubtitles: { ...s.providers.opensubtitles, [key]: value } },
-    });
-  }
   async function action(fn: () => Promise<void>) {
     setError('');
     setMessage('');
@@ -61,52 +46,60 @@ function SettingsPage() {
         </div>
         <div className="grid">
           <label>
-            Provider
+            Translation Engine
             <select
               value={t.provider}
-              onChange={(e) => translation('provider', e.target.value as 'lmstudio' | 'openai')}
+              onChange={(e) => translation('provider', e.target.value as typeof t.provider)}
             >
-              <option value="lmstudio">LM Studio</option>
-              <option value="openai">OpenAI-compatible API</option>
+              <option value="lmstudio">Local LLM (LM Studio)</option>
+              <option value="gemini">Gemini API</option>
             </select>
           </label>
-          <label>
-            출력 형식
-            <select
-              value={t.structured}
-              onChange={(e) => translation('structured', e.target.value as typeof t.structured)}
-            >
-              <option value="json_schema">JSON Schema (엄격)</option>
-              <option value="json_object">JSON Object</option>
-              <option value="none">JSON Prompt만 사용</option>
-            </select>
-          </label>
+          {t.provider !== 'gemini' && (
+            <label>
+              출력 형식
+              <select
+                value={t.structured}
+                onChange={(e) => translation('structured', e.target.value as typeof t.structured)}
+              >
+                <option value="json_schema">JSON Schema (엄격)</option>
+                <option value="json_object">JSON Object</option>
+                <option value="none">JSON Prompt만 사용</option>
+              </select>
+            </label>
+          )}
         </div>
-        <label>
-          Base URL
-          <input
-            type="url"
-            value={t.baseUrl}
-            placeholder="http://127.0.0.1:1234/v1"
-            onChange={(e) => translation('baseUrl', e.target.value)}
-          />
-        </label>
+        {t.provider !== 'gemini' && (
+          <label>
+            Base URL
+            <input
+              type="url"
+              value={t.baseUrl}
+              placeholder="http://127.0.0.1:1234/v1"
+              onChange={(e) => translation('baseUrl', e.target.value)}
+            />
+          </label>
+        )}
         <div className="grid">
           <label>
             API Key
             <input
               type="password"
               autoComplete="off"
-              value={t.apiKey}
-              onChange={(e) => translation('apiKey', e.target.value)}
+              value={t.provider === 'gemini' ? t.geminiApiKey : t.apiKey}
+              onChange={(e) =>
+                translation(t.provider === 'gemini' ? 'geminiApiKey' : 'apiKey', e.target.value)
+              }
             />
           </label>
           <label>
             Model ID
             <input
-              value={t.model}
+              value={t.provider === 'gemini' ? t.geminiModel : t.model}
               list="models"
-              onChange={(e) => translation('model', e.target.value)}
+              onChange={(e) =>
+                translation(t.provider === 'gemini' ? 'geminiModel' : 'model', e.target.value)
+              }
             />
             <datalist id="models">
               {models.map((m) => (
@@ -120,7 +113,9 @@ function SettingsPage() {
           disabled={busy}
           onClick={() =>
             void action(async () => {
-              await requestHost(t.baseUrl);
+              await requestHost(
+                t.provider === 'gemini' ? 'https://generativelanguage.googleapis.com' : t.baseUrl,
+              );
               const r = await send<{ models: string[] }>({ type: 'TEST_CONNECTION', settings: s });
               setModels(r.models);
               setMessage('연결 성공 · ' + r.models.length + '개 모델');
@@ -130,137 +125,53 @@ function SettingsPage() {
           Test Connection
         </button>
         <p className="muted">
-          서버의 /v1 경로를 포함하세요. JSON Schema를 지원하지 않는 모델은 출력 형식을 변경하세요.
+          {t.provider === 'gemini'
+            ? '연결 테스트로 사용 가능한 Gemini 모델을 확인하세요. 일본어와 영어에 같은 엔진을 사용합니다.'
+            : '서버의 /v1 경로를 포함하세요. OpenAI 호환 로컬 서버도 지원합니다. JSON Schema를 지원하지 않는 모델은 출력 형식을 변경하세요.'}
         </p>
       </section>
       <section>
         <div className="section-title">
           <span className="number">02</span>
-          <h2>자막 Provider</h2>
+          <h2>자막 자동 검색 설정</h2>
         </div>
-        <div className="provider automatic-provider">
-          <h3>
-            Anissia <span className="badge">자동 활성화</span>
-          </h3>
-          <p className="muted">
-            API Key 없이 한국어 자막을 검색합니다. 제작자가 여러 명이면 후보를 선택하세요.
-          </p>
-          <small>한국어 검색 순서: Anissia → SubDL → OpenSubtitles</small>
-        </div>
-        <div className="grid">
-          <div className="provider">
-            <h3>SubDL</h3>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={s.providers.subdl.enabled}
-                onChange={(e) => subdl('enabled', e.target.checked)}
-              />{' '}
-              사용
-            </label>
-            <label>
-              API Key
-              <input
-                type="password"
-                autoComplete="off"
-                value={s.providers.subdl.apiKey}
-                onChange={(e) => subdl('apiKey', e.target.value)}
-              />
-            </label>
-            <label>
-              일본어 검색 우선순위
-              <input
-                type="number"
-                min="1"
-                value={s.providers.subdl.priority}
-                onChange={(e) => subdl('priority', Number(e.target.value))}
-              />
-            </label>
-            <a href="https://subdl.com/api-doc" target="_blank" rel="noreferrer">
-              API Key 안내 ↗
-            </a>
-          </div>
-          <div className="provider">
-            <h3>OpenSubtitles</h3>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={s.providers.opensubtitles.enabled}
-                onChange={(e) => opensubtitles('enabled', e.target.checked)}
-              />{' '}
-              사용
-            </label>
-            <label>
-              API Key
-              <input
-                type="password"
-                autoComplete="off"
-                value={s.providers.opensubtitles.apiKey}
-                onChange={(e) => opensubtitles('apiKey', e.target.value)}
-              />
-            </label>
-            <label>
-              Token
-              <input
-                type="password"
-                autoComplete="off"
-                value={s.providers.opensubtitles.token}
-                onChange={(e) => opensubtitles('token', e.target.value)}
-              />
-            </label>
-            <div className="grid">
-              <label>
-                Username
-                <input
-                  autoComplete="off"
-                  value={s.providers.opensubtitles.username}
-                  onChange={(e) => opensubtitles('username', e.target.value)}
-                />
-              </label>
-              <label>
-                Password
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={s.providers.opensubtitles.password}
-                  onChange={(e) => opensubtitles('password', e.target.value)}
-                />
-              </label>
-            </div>
-            <label>
-              일본어 검색 우선순위
-              <input
-                type="number"
-                min="1"
-                value={s.providers.opensubtitles.priority}
-                onChange={(e) => opensubtitles('priority', Number(e.target.value))}
-              />
-            </label>
-            <button
-              className="secondary"
-              disabled={busy}
-              onClick={() =>
-                void action(async () => {
-                  await send({ type: 'LOGIN_OPENSUBTITLES', config: s.providers.opensubtitles });
-                  const r = await send<{ settings: Settings }>({ type: 'GET_SETTINGS' });
-                  setS({
-                    ...s,
-                    providers: {
-                      ...s.providers,
-                      opensubtitles: r.settings.providers.opensubtitles,
-                    },
-                  });
-                  setMessage('OpenSubtitles 로그인 성공 · Token 저장');
-                })
+        {(
+          [
+            ['anissia', 'Anissia 한국어 자막 우선 검색'],
+            ['japaneseTranslation', '일본어 자막 검색 후 AI 번역'],
+            ['embeddedEnglish', '사이트 영어 자막 fallback'],
+          ] as const
+        ).map(([key, label]) => (
+          <label className="check" key={key}>
+            <input
+              type="checkbox"
+              checked={s.autoSources[key]}
+              onChange={(e) =>
+                setS({ ...s, autoSources: { ...s.autoSources, [key]: e.target.checked } })
               }
-            >
-              로그인 / Token 저장
-            </button>
-          </div>
-        </div>
+            />
+            {label}
+          </label>
+        ))}
         <p className="muted">
-          일본어 검색은 작은 우선순위 숫자를 먼저 사용합니다. API Key는 각 서비스에서 발급받으세요.
+          자동 모드는 켜진 단계만 순서대로 사용합니다. 한국어 자막은 번역 없이 표시합니다.
         </p>
+        <details>
+          <summary>고급 설정</summary>
+          <label>
+            Jimaku API Key (선택)
+            <input
+              type="password"
+              autoComplete="off"
+              value={s.jimaku.apiKey}
+              onChange={(e) => setS({ ...s, jimaku: { apiKey: e.target.value } })}
+            />
+          </label>
+          <small>키가 없거나 요청이 실패하면 Kitsunekko 미러에서 계속 검색합니다.</small>
+          <a href="https://jimaku.cc/api/docs" target="_blank" rel="noreferrer">
+            Jimaku API 안내 ↗
+          </a>
+        </details>
       </section>
       <section>
         <div className="section-title">
@@ -369,7 +280,9 @@ function SettingsPage() {
           disabled={busy}
           onClick={() =>
             void action(async () => {
-              await requestHost(t.baseUrl);
+              await requestHost(
+                t.provider === 'gemini' ? 'https://generativelanguage.googleapis.com' : t.baseUrl,
+              );
               await send({ type: 'SAVE_SETTINGS', settings: s });
               setMessage('설정이 저장되었습니다.');
             })

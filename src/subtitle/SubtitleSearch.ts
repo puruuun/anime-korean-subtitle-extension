@@ -1,11 +1,6 @@
 import type { AnimeContext } from '../anime/AnimeContext';
 import { normalizeTitle, titleCandidates } from '../anime/titleNormalizer';
-import type {
-  SourceLanguage,
-  SubtitleSearchResult,
-  SubtitleProvider,
-} from '../providers/SubtitleProvider';
-import { AppError } from '../utils/errors';
+import type { SourceLanguage, SubtitleSearchResult } from '../providers/SubtitleProvider';
 import { normalizeEpisode } from '../anime/episodeNormalizer';
 export function scoreResult(
   c: AnimeContext,
@@ -18,7 +13,11 @@ export function scoreResult(
     score += n;
     reasons.push(reason);
   };
-  const id = !!((c.imdbId && r.imdbId === c.imdbId) || (c.tmdbId && r.tmdbId === c.tmdbId));
+  const id = !!(
+    (c.anilistId && r.anilistId === c.anilistId) ||
+    (c.imdbId && r.imdbId === c.imdbId) ||
+    (c.tmdbId && r.tmdbId === c.tmdbId)
+  );
   const title = titleCandidates(c).some(
     (t) => normalizeTitle(t) === normalizeTitle(r.matchedTitle ?? r.title),
   );
@@ -45,38 +44,4 @@ export function scoreResult(
     autoEligible:
       !conflict && episodeMatches && r.language === language && (id || title) && score >= 120,
   };
-}
-export class SubtitleSearch {
-  constructor(private providers: SubtitleProvider[]) {}
-  async search(c: AnimeContext, language: SourceLanguage, signal?: AbortSignal) {
-    const results: SubtitleSearchResult[] = [];
-    const errors: string[] = [];
-    let hardFailure = false;
-    const priority: Record<string, number> = { anissia: 1, subdl: 2, opensubtitles: 3 };
-    const providers =
-      language === 'ko'
-        ? [...this.providers].sort((a, b) => (priority[a.id] ?? 4) - (priority[b.id] ?? 4))
-        : this.providers;
-    for (const p of providers) {
-      signal?.throwIfAborted();
-      try {
-        results.push(...(await p.search(c, language)).map((r) => scoreResult(c, r, language)));
-      } catch {
-        signal?.throwIfAborted();
-        errors.push(p.id + ' 검색 실패');
-        if (p.id !== 'anissia') hardFailure = true;
-      }
-    }
-    if (!results.length && hardFailure)
-      throw new AppError('PROVIDER', '자막 Provider 요청에 실패했습니다: ' + errors.join(', '));
-    return {
-      results: [...new Map(results.map((r) => [r.id, r])).values()].sort(
-        (a, b) =>
-          Number(!!b.autoEligible) - Number(!!a.autoEligible) ||
-          (language === 'ko' ? (priority[a.providerId] ?? 4) - (priority[b.providerId] ?? 4) : 0) ||
-          (b.score ?? 0) - (a.score ?? 0),
-      ),
-      warnings: errors,
-    };
-  }
 }

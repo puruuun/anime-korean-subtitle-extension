@@ -7,6 +7,7 @@ import {
   syncFrame,
   updateOffset,
   reportPlayback,
+  ensureAutomaticJob,
 } from './messageRouter';
 import { getSettings, saveSettings, validateSettings, type Settings } from '../storage/settings';
 import { setOffset } from '../storage/offsets';
@@ -18,8 +19,7 @@ import {
   collectSubtitles,
   supportedTab,
 } from './frameManager';
-import { OpenAICompatibleProvider } from '../translation/openaiCompatible/OpenAICompatibleProvider';
-import { OpenSubtitlesProvider } from '../providers/opensubtitles/OpenSubtitlesProvider';
+import { createTranslationProvider } from '../translation/createTranslationProvider';
 import { errorText } from '../utils/errors';
 const storageReady = Promise.all([
   chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }),
@@ -38,6 +38,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
       if (m.type === 'FRAME_READY') {
         const changed = await recordFrame(sender, m.hasVideo === true, Number(m.area) || 0);
         if (changed) await syncFrame(tabId, sender.frameId);
+        if (m.hasVideo === true) void ensureAutomaticJob(tabId);
         return { ok: true };
       }
       if (m.type === 'CONTEXT_CHANGED' && sender.frameId === 0) {
@@ -59,6 +60,15 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
         return { ok: true };
       case 'GET_STATUS':
         return { ok: true, status: await currentStatus(m.tabId) };
+      case 'GET_PREFERENCES':
+        return { ok: true, mode: (await getSettings()).mode };
+      case 'SET_MODE': {
+        const settings = await getSettings();
+        settings.mode = m.mode;
+        validateSettings(settings);
+        await saveSettings(settings);
+        return { ok: true };
+      }
       case 'GET_SETTINGS':
         return { ok: true, settings: await getSettings() };
       case 'SAVE_SETTINGS':
@@ -68,15 +78,8 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
         validateSettings(m.settings as Settings);
         return {
           ok: true,
-          models: await new OpenAICompatibleProvider(m.settings.translation).testConnection(),
+          models: await createTranslationProvider(m.settings.translation).testConnection(),
         };
-      case 'LOGIN_OPENSUBTITLES': {
-        const s = await getSettings();
-        const result = await new OpenSubtitlesProvider(m.config).login();
-        s.providers.opensubtitles = { ...s.providers.opensubtitles, ...m.config, ...result };
-        await saveSettings(s);
-        return { ok: true };
-      }
       case 'FRAME_INVENTORY':
         return { ok: true, frames: await frameInventory(m.tabId) };
       case 'SOURCE_ORIGINS': {

@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import type { SubtitleCue } from '../src/subtitle/SubtitleCue';
 import { SubtitleCore } from '../src/subtitle/SubtitleCore';
-import { autoMode } from '../src/subtitle/AutoMode';
 import { AppError } from '../src/utils/errors';
 import { defaultSettings } from '../src/storage/settings';
 import { loadHLSSubtitles, englishRenditions } from '../src/subtitle/HLSSubtitles';
@@ -11,7 +10,7 @@ describe('independent modes and AUTO', () => {
     const search = vi.fn(async () => []),
       fetchMock = vi.spyOn(globalThis, 'fetch');
     const core = new SubtitleCore(
-      [{ id: 'mock', search, download: vi.fn() }],
+      [{ id: 'anissia', search, download: vi.fn() }],
       defaultSettings,
       () => {},
       new AbortController().signal,
@@ -21,7 +20,7 @@ describe('independent modes and AUTO', () => {
       core.run({ site: 'miruro', title: 'A', episode: 1, pageUrl: 'https://www.miruro.to' }, 'ko'),
     ).rejects.toThrow('한국어');
     expect(search).toHaveBeenCalledOnce();
-    expect(search.mock.calls[0]).toHaveLength(2);
+    expect(search.mock.calls[0]).toHaveLength(3);
     expect(fetchMock).not.toHaveBeenCalled();
     fetchMock.mockRestore();
   });
@@ -39,7 +38,7 @@ describe('independent modes and AUTO', () => {
       }
     }
     const core = new FallbackCore(
-      [{ id: 'mock', search, download }],
+      [{ id: 'anissia', search, download }],
       defaultSettings,
       () => {},
       new AbortController().signal,
@@ -94,32 +93,6 @@ describe('independent modes and AUTO', () => {
       core.run({ site: 'miruro', title: 'A', episode: 1, pageUrl: 'https://www.miruro.to' }, 'en'),
     ).rejects.toThrow('model offline');
     expect(translated).toHaveBeenCalledOnce();
-  });
-  it('AUTO calls KO then JA then EN only when missing', async () => {
-    const order: string[] = [];
-    const step =
-      (id: string, missing = false) =>
-      async () => {
-        order.push(id);
-        if (missing) throw new AppError('NOT_FOUND', 'missing');
-        return id;
-      };
-    expect(await autoMode(step('ko', true), step('ja', true), step('en'), () => {})).toBe('en');
-    expect(order).toEqual(['ko', 'ja', 'en']);
-  });
-  it('AUTO stops on auth, uncertain match and translation error', async () => {
-    const ja = vi.fn();
-    await expect(
-      autoMode(
-        async () => {
-          throw new AppError('HTTP_401', 'auth');
-        },
-        ja,
-        vi.fn(),
-        () => {},
-      ),
-    ).rejects.toThrow('auth');
-    expect(ja).not.toHaveBeenCalled();
   });
   it('extracts only English HLS rendition and preserves times', async () => {
     const master =

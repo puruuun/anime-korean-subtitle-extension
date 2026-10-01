@@ -1,5 +1,5 @@
 {
-  "browser": "msedge",
+  "browser": "chromium",
   "passed": 9,
   "tests": [
     "Initial request contains only 20 cues; normal playback waits only for the small initial chunk",

@@ -188,13 +188,14 @@ export async function reportPlayback(
       translation: j.queue.snapshot(),
     });
 }
-export async function currentStatus(tabId: number) {
+export async function currentStatus(tabId: number): Promise<JobStatus | undefined> {
   const j = jobs.get(tabId);
   if (j) {
     if (j.queue) {
       await readPlayback(tabId, j);
       j.status.translation = j.queue.snapshot();
     }
+    if (jobs.get(tabId) !== j) return currentStatus(tabId);
     return uiStatus(j.status);
   }
   const r = await chrome.storage.session.get('job:' + tabId);
@@ -374,7 +375,7 @@ async function cancelJobInternal(tabId: number, stopFollow = true) {
   if (j) await j.writes;
   const epoch = await nextEpoch(tabId);
   await chrome.storage.session.remove(['job:' + tabId, 'render:' + tabId]);
-  if (stopFollow) await chrome.storage.session.remove('follow:' + tabId);
+  if (stopFollow) await chrome.storage.session.set({ ['follow:' + tabId]: { enabled: false } });
   await clearFrames(tabId, epoch);
   await setBusy(tabId, false, epoch);
 }
@@ -387,29 +388,43 @@ export function startJob(tabId: number, mode: Mode, override?: AnimeContext, sel
 export function cancelJob(tabId: number, stopFollow = true) {
   return exclusive(tabId, () => cancelJobInternal(tabId, stopFollow));
 }
+export function ensureAutomaticJob(tabId: number) {
+  return exclusive(tabId, async () => {
+    if (jobs.has(tabId) || navigationTimers.has(tabId)) return;
+    const state = await chrome.storage.session.get(['follow:' + tabId, 'job:' + tabId]);
+    const follow = state['follow:' + tabId] as { enabled?: boolean; mode?: Mode } | undefined;
+    if (follow?.enabled === false || state['job:' + tabId]) return;
+    try {
+      await startJobInternal(tabId, follow?.mode ?? (await getSettings()).mode);
+    } catch {
+      /* Metadata/player may arrive later; FRAME_READY retries until the first job starts. */
+    }
+  });
+}
 export function contextChanged(tabId: number) {
   return exclusive(tabId, async () => {
     clearNavigationTimer(tabId);
     const state = await chrome.storage.session.get('follow:' + tabId);
     await cancelJobInternal(tabId, false);
     const follow = state['follow:' + tabId] as { mode: Mode; enabled: boolean } | undefined;
-    if (!follow?.enabled) return;
+    if (follow?.enabled === false) return;
+    const nextMode = follow?.mode ?? (await getSettings()).mode;
     const timer = setTimeout(() => {
       void exclusive(tabId, async () => {
         if (navigationTimers.get(tabId) !== timer) return;
         navigationTimers.delete(tabId);
         const state = await chrome.storage.session.get('follow:' + tabId);
         const f = state['follow:' + tabId] as { enabled: boolean; mode: Mode } | undefined;
-        if (!f?.enabled) return;
+        if (f?.enabled === false) return;
         try {
-          await startJobInternal(tabId, f.mode);
+          await startJobInternal(tabId, f?.mode ?? nextMode);
         } catch (e) {
           await chrome.storage.session.set({
             ['job:' + tabId]: {
               busy: false,
               stage: 'error',
               message: errorText(e),
-              mode: f.mode,
+              mode: f?.mode ?? nextMode,
               offset: 0,
               updatedAt: Date.now(),
             },

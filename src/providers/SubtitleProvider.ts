@@ -9,10 +9,13 @@ export interface SubtitleSearchResult {
   episode?: number | string;
   season?: number;
   year?: number;
+  anilistId?: number;
+  filename?: string;
+  episodeConfidence?: number;
+  episodeType?: 'ova' | 'sp' | 'special';
   imdbId?: string;
   tmdbId?: number;
   downloadUrl?: string;
-  fileId?: number;
   score?: number;
   autoEligible?: boolean;
   reasons?: string[];
@@ -24,6 +27,9 @@ export interface SubtitleSearchResult {
   linkMessage?: string;
 }
 export interface SubtitleCandidate extends SubtitleSearchResult {
+  provider?: 'anissia' | 'jimaku' | 'kitsunekko';
+}
+export interface AnissiaSubtitleCandidate extends SubtitleCandidate {
   provider: 'anissia';
   providerId: 'anissia';
   episode: string;
@@ -38,6 +44,18 @@ export interface SubtitleCandidate extends SubtitleSearchResult {
 }
 export interface SubtitleProvider {
   id: string;
-  search(context: AnimeContext, language: SourceLanguage): Promise<SubtitleSearchResult[]>;
-  download(result: SubtitleSearchResult): Promise<ArrayBuffer>;
+  search(
+    context: AnimeContext,
+    language: SourceLanguage,
+    signal?: AbortSignal,
+  ): Promise<SubtitleSearchResult[]>;
+  download(result: SubtitleSearchResult, signal?: AbortSignal): Promise<ArrayBuffer>;
+}
+
+export interface SubtitleFile {
+  candidate: SubtitleSearchResult;
+  cues: import('../subtitle/SubtitleCue').SubtitleCue[];
+}
+export interface JapaneseSubtitleProvider extends SubtitleProvider {
+  id: 'jimaku' | 'kitsunekko';
 }

@@ -1,249 +1,335 @@
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, cp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import assert from 'node:assert/strict';
 const report = [];
 let llmCalls = 0,
-  languageQueries = [];
+  geminiCalls = 0,
+  phase = 'ko';
+const counts = { anissia: 0, jimaku: 0, kitsunekko: 0 };
 const local = createServer(async (req, res) => {
   if (req.url === '/v1/models') {
-    res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ data: [{ id: 'test-model' }] }));
     return;
   }
   let body = '';
-  for await (const c of req) body += c;
-  try {
-    const input = JSON.parse(body),
-      payload = JSON.parse(input.messages.at(-1).content);
-    llmCalls++;
-    assert(
-      payload.toTranslate.every((c) => Object.keys(c).every((k) => ['id', 'text'].includes(k))),
-    );
-    res.setHeader('Content-Type', 'application/json');
-    res.end(
-      JSON.stringify({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                translations: payload.toTranslate.map((c) => ({
-                  id: c.id,
-                  text: '한국어 ' + c.text,
-                })),
-              }),
-            },
-            finish_reason: 'stop',
+  for await (const chunk of req) body += chunk;
+  const input = JSON.parse(body),
+    payload = JSON.parse(input.messages.at(-1).content);
+  llmCalls++;
+  assert(payload.toTranslate.every((c) => Object.keys(c).every((k) => ['id', 'text'].includes(k))));
+  res.end(
+    JSON.stringify({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              translations: payload.toTranslate.map((c) => ({
+                id: c.id,
+                text: '한국어 ' + c.text,
+              })),
+            }),
           },
-        ],
-      }),
-    );
-  } catch {
-    res.statusCode = 500;
-    res.end('invalid request');
-  }
+          finish_reason: 'stop',
+        },
+      ],
+    }),
+  );
 });
 await new Promise((r) => local.listen(0, '127.0.0.1', r));
 const port = local.address().port;
-const profile = await mkdtemp(join(tmpdir(), 'animesub-browser-'));
-const dist = resolve('dist');
-const opts = {
+const temp = await mkdtemp(join(tmpdir(), 'animesub-pipeline-'));
+const dist = join(temp, 'extension');
+await cp(resolve('dist'), dist, { recursive: true });
+const manifest = JSON.parse(await readFile(join(dist, 'manifest.json'), 'utf8'));
+manifest.host_permissions.push('https://blog.example/*', 'https://cdn.example/*');
+await writeFile(join(dist, 'manifest.json'), JSON.stringify(manifest));
+const context = await chromium.launchPersistentContext(join(temp, 'profile'), {
+  channel: 'chromium',
   headless: true,
   ignoreDefaultArgs: ['--disable-extensions'],
   args: ['--disable-extensions-except=' + dist, '--load-extension=' + dist],
-  viewport: { width: 1280, height: 800 },
-};
-if (process.env.ANIMESUB_BROWSER_CHANNEL) opts.channel = process.env.ANIMESUB_BROWSER_CHANNEL;
-else if (process.platform === 'win32') opts.channel = 'msedge';
-const context = await chromium.launchPersistentContext(profile, opts);
+  viewport: { width: 1280, height: 900 },
+});
+const srt = (text) => '1\n00:00:01,000 --> 00:00:05,000\n' + text;
+const root =
+  'https://raw.githubusercontent.com/Ajatt-Tools/kitsunekko-mirror/refs/heads/main/subtitles/anime_tv/Test/';
 try {
-  await context.route('https://api.anissia.net/**', (r) =>
-    r.fulfill({ status: 200, contentType: 'application/json', body: '{"code":"ok","data":[]}' }),
-  );
-  await context.route('https://graphql.anilist.co/**', (r) =>
-    r.fulfill({ status: 200, contentType: 'application/json', body: '{"data":null}' }),
-  );
-  await context.route('https://api.subdl.com/**', (r) => {
-    const u = new URL(r.request().url()),
-      language = u.searchParams.get('languages');
-    languageQueries.push(language);
-    const episode = Number(u.searchParams.get('episode_number'));
-    r.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        status: true,
-        results: [{ name: 'Test Show' }],
-        subtitles: [
+  await context.route('https://graphql.anilist.co/**', (r) => r.fulfill({ json: { data: null } }));
+  await context.route('https://api.anissia.net/**', (r) => {
+    counts.anissia++;
+    const schedule = r.request().url().includes('/schedule/');
+    const data = schedule
+      ? [
           {
-            name: 'Test.Show.E' + episode + '.srt',
-            release_name: 'Test Show E' + episode,
-            language,
-            episode,
-            url: '/subtitle/' + language + episode + '.srt',
+            animeNo: 42,
+            subject: 'Test Show',
+            originalSubject: 'テスト',
+            startDate: '',
+            endDate: '',
           },
-        ],
-      }),
+        ]
+      : [
+          {
+            episode: '7',
+            name: 'Author',
+            updDt: phase,
+            website: 'https://blog.example/' + phase + '.srt',
+          },
+        ];
+    return r.fulfill({ json: { code: 'ok', data: phase === 'allmissing' ? [] : data } });
+  });
+  await context.route('https://blog.example/**', (r) =>
+    r.fulfill({
+      contentType: phase === 'ko' ? 'text/plain' : 'text/html',
+      body: phase === 'ko' ? srt('한국어 원본') : '<html><body>Unavailable file</body></html>',
+    }),
+  );
+  await context.route('https://jimaku.cc/api/**', (r) => {
+    counts.jimaku++;
+    if (phase === 'jimaku-error') return r.fulfill({ status: 500, body: '{}' });
+    if (!['ja', 'mirror-file-failure', 'gemini'].includes(phase)) return r.fulfill({ json: [] });
+    return r.fulfill({
+      json: r.request().url().includes('/search?')
+        ? [{ id: 9, name: 'Test Show', anilist_id: 123, japanese_name: 'テスト' }]
+        : [
+            {
+              name: 'Test Show E07.srt',
+              url: 'https://jimaku.cc/subtitle/7.srt',
+              size: 100,
+              last_modified: phase,
+            },
+          ],
     });
   });
-  await context.route('https://dl.subdl.com/**', (r) =>
+  await context.route('https://jimaku.cc/subtitle/**', (r) =>
     r.fulfill({
-      status: 200,
       contentType: 'text/plain',
+      body: phase === 'mirror-file-failure' ? '<html>bad file</html>' : srt('日本語 原文'),
+    }),
+  );
+  await context.route('https://subtitles.ajatt.top/**', (r) => {
+    counts.kitsunekko++;
+    return r.fulfill({
+      contentType: 'text/html',
       body:
-        '1\n00:00:00,000 --> 00:00:05,000\n' +
-        (r.request().url().includes('KO') ? '한국어 원본' : '日本語 原文'),
-    }),
+        r.request().url() === 'https://subtitles.ajatt.top/'
+          ? '<table><tr><td>1</td><td><a href="anime_tv/test.html">Test Show</a></td><td>TV</td><td>Test Show</td><td>テスト</td></tr></table>'
+          : ['mirror', 'jimaku-error', 'mirror-file-failure'].includes(phase)
+            ? `<a href="${root}Test%20Show%20E07.srt">7</a>`
+            : `<a href="${root}Test%20Show%20E08.srt">8</a>`,
+    });
+  });
+  await context.route(root + '**', (r) =>
+    r.fulfill({ contentType: 'text/plain', body: srt('日本語 Mirror') }),
   );
-  await context.route('https://cdn.example/en.vtt', (r) =>
-    r.fulfill({
-      status: 200,
-      headers: { 'Access-Control-Allow-Origin': '*' },
-      contentType: 'text/vtt',
-      body: 'WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nHello, friend.',
-    }),
-  );
+  await context.route('https://generativelanguage.googleapis.com/**', (r) => {
+    const body = r.request().postDataJSON();
+    geminiCalls++;
+    assert(r.request().headers()['x-goog-api-key'] === 'test-gemini-key');
+    const payload = JSON.parse(body.contents[0].parts[0].text);
+    return r.fulfill({
+      json: {
+        candidates: [
+          {
+            finishReason: 'STOP',
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    translations: payload.toTranslate.map((c) => ({
+                      id: c.id,
+                      text: 'Gemini 한국어 ' + c.text,
+                    })),
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+  });
   const fixture =
-    '<!doctype html><html><head><title>Watch Test Show · Miruro</title></head><body style="margin:0;background:#12121c;color:white"><h1 class="anime-title">Test Show</h1><div style="width:900px;height:506px;position:relative"><video style="width:100%;height:100%" controls><track src="https://cdn.example/en.vtt" srclang="en" label="English" kind="subtitles"></video></div></body></html>';
+    '<!doctype html><title>Watch Test Show</title><h1 class="anime-title">Test Show</h1><script type="application/ld+json">{"@type":"TVEpisode","episodeNumber":7,"partOfSeries":{"name":"Test Show"}}</script><div style="width:900px;height:506px;position:relative"><video style="width:100%;height:100%" controls></video></div>';
   await context.route('https://www.miruro.to/**', (r) =>
     r.fulfill({ contentType: 'text/html', body: fixture }),
   );
-  const site = await context.newPage();
-  await site.goto('https://www.miruro.to/watch/test?ep=1');
-  const worker =
-    context.serviceWorkers()[0] ??
-    (await context.waitForEvent('serviceworker', { timeout: 15000 }));
+  const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
   const id = new URL(worker.url()).host;
-  const tabId = await worker.evaluate(async () => {
-    const tabs = await chrome.tabs.query({});
-    return tabs.find((t) => t.url?.includes('/watch/test'))?.id;
-  });
-  assert(tabId);
-  await worker.evaluate(
-    async ({ port }) => {
-      const s = {
-        mode: 'ko',
+  await worker.evaluate(async (port) => {
+    await chrome.storage.local.set({
+      settings: {
+        mode: 'auto',
         translation: {
           provider: 'lmstudio',
+          model: 'test-model',
           baseUrl: 'http://127.0.0.1:' + port + '/v1',
           apiKey: 'test-secret',
-          model: 'test-model',
-          chunkSize: 45,
-          maxCharacters: 5000,
-          contextCues: 5,
-          temperature: 0.2,
           timeoutMs: 10000,
-          maxRetry: 1,
-          structured: 'json_schema',
         },
-        providers: {
-          subdl: { enabled: true, apiKey: 'test-subdl-key', priority: 1 },
-          opensubtitles: {
-            enabled: false,
-            apiKey: '',
-            token: '',
-            username: '',
-            password: '',
-            baseUrl: 'https://api.opensubtitles.com/api/v1',
-            priority: 2,
-          },
-        },
-        display: { fontSize: 28, bottom: 8, backgroundOpacity: 0.55, outline: 2, maxLines: 3 },
-        debug: false,
-      };
-      await chrome.storage.local.set({ settings: s });
-    },
-    { port },
+        jimaku: { apiKey: 'test-jimaku-key' },
+      },
+    });
+  }, port);
+  const site = await context.newPage();
+  await site.goto('https://www.miruro.to/watch/test?ep=7');
+  await site.waitForSelector('[data-animesub-overlay]');
+  await site.evaluate(() => {
+    const track = document.querySelector('video').addTextTrack('subtitles', 'English', 'en');
+    track.addCue(new VTTCue(1, 5, 'Hello'));
+    track.mode = 'hidden';
+  });
+  const tabId = await worker.evaluate(
+    async () => (await chrome.tabs.query({})).find((t) => t.url?.includes('/watch/test'))?.id,
   );
-  await site.waitForSelector('[data-animesub-overlay]', { timeout: 10000 });
-  // Open extension UI in a background tab, keeping the video tab active.
-  await worker.evaluate(async (tabId) => {
-    await chrome.tabs.update(tabId, { active: true });
-  }, tabId);
-  const opened = context.waitForEvent('page');
+  const popupPromise = context.waitForEvent('page');
   await worker.evaluate(
     async (url) => {
       await chrome.tabs.create({ url, active: false });
     },
     'chrome-extension://' + id + '/popup.html',
   );
-  const popup = await opened;
+  const popup = await popupPromise;
   await popup.waitForSelector('.mode');
-  async function run(label) {
-    const old = await worker.evaluate(
-      async (tabId) => (await chrome.storage.session.get('job:' + tabId))['job:' + tabId],
-      tabId,
+  const send = (msg) =>
+    popup.evaluate(async (m) => {
+      const r = await chrome.runtime.sendMessage(m);
+      if (!r.ok) throw Error(r.error);
+      return r;
+    }, msg);
+  async function waitDone(jobId) {
+    const expires = Date.now() + 20000;
+    while (Date.now() < expires) {
+      const { status } = await send({ type: 'GET_STATUS', tabId });
+      if ((!jobId || status?.jobId === jobId) && status?.stage === 'error')
+        throw Error(status.message);
+      if (status?.stage === 'done' && !status.busy && (!jobId || status.jobId === jobId))
+        return status;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw Error(
+      'Job completion timeout: ' +
+        JSON.stringify((await send({ type: 'GET_STATUS', tabId })).status),
     );
-    await popup.getByText(label, { exact: true }).click();
-    await popup.getByRole('button', { name: '한국어 자막 적용', exact: true }).click();
-    await popup.waitForFunction(
-      async ({ tabId, oldId }) => {
-        const r = await chrome.runtime.sendMessage({ type: 'GET_STATUS', tabId });
-        if (r.status?.stage === 'error') throw Error(r.status.message);
-        return r.status?.jobId !== oldId && r.status?.stage === 'done';
-      },
-      { tabId, oldId: old?.jobId },
-      { timeout: 20000 },
-    );
-    await popup
-      .getByRole('status')
-      .filter({ hasText: '한국어 자막 적용 완료' })
-      .waitFor({ timeout: 5000 });
   }
-  await run('한국어 자막 검색');
+  assert.equal((await waitDone()).source, 'anissia');
   assert.equal(llmCalls, 0);
-  report.push('Mode 1: KO search/download/apply, zero LLM calls');
-  await run('일본어 자막 → 한국어');
+  assert.equal(counts.jimaku, 0);
+  assert.equal(counts.kitsunekko, 0);
+  report.push(
+    'A: initial video page starts AUTO, Anissia applies directly, zero Japanese/LLM calls',
+  );
+  async function run(nextPhase, mode = 'auto', changes = {}) {
+    phase = nextPhase;
+    await send({ type: 'CLEAR_CACHE' });
+    const s = (await send({ type: 'GET_SETTINGS' })).settings;
+    Object.assign(s, changes);
+    await send({ type: 'SAVE_SETTINGS', settings: s });
+    const started = await send({ type: 'RUN', tabId, mode });
+    return waitDone(started.status.jobId);
+  }
+  assert.equal((await run('ja')).source, 'jimaku');
   assert.equal(llmCalls, 1);
-  report.push('Mode 2: JA search → validated Korean translation → apply');
-  const before = languageQueries.length;
-  await run('사이트 영어 자막 → 한국어');
-  assert.equal(languageQueries.length, before);
-  assert.equal(llmCalls, 2);
-  report.push('Mode 3: English <track> → translation, no external provider search');
-  await run('사이트 영어 자막 → 한국어');
-  assert.equal(llmCalls, 2);
-  report.push('Repeated translation reused IndexedDB with zero new LLM calls');
-  const rawDOM = await site.content();
-  assert(!rawDOM.includes('test-secret') && !rawDOM.includes('test-subdl-key'));
-  const rawStorage = await site.evaluate(async () => {
+  report.push('B: unresolved Anissia page falls through to Jimaku JA → local Korean translation');
+  let before = counts.jimaku;
+  assert.equal((await run('mirror', 'auto', { jimaku: { apiKey: '' } })).source, 'kitsunekko');
+  assert.equal(counts.jimaku, before);
+  report.push('C: no Jimaku key makes zero Jimaku HTTP requests and uses Kitsunekko');
+  assert.equal(
+    (await run('jimaku-error', 'auto', { jimaku: { apiKey: 'test-jimaku-key' } })).source,
+    'kitsunekko',
+  );
+  report.push('D: Jimaku 500 automatically uses Kitsunekko');
+  assert.equal((await run('mirror-file-failure')).source, 'kitsunekko');
+  report.push('Jimaku candidate with an invalid subtitle file falls through to Kitsunekko');
+  assert.equal((await run('en')).source, 'embedded-en');
+  report.push('E: Japanese episode mismatch falls through to embedded English');
+  const externalBefore = { ...counts };
+  await run('ko', 'ko');
+  assert.equal(counts.jimaku, externalBefore.jimaku);
+  assert.equal(counts.kitsunekko, externalBefore.kitsunekko);
+  report.push('F: Manual Korean uses only Anissia');
+  before = counts.anissia;
+  assert.equal((await run('mirror', 'ja')).source, 'kitsunekko');
+  assert.equal(counts.anissia, before);
+  report.push('G: Manual Japanese uses only Jimaku → Kitsunekko');
+  const allBefore = { ...counts };
+  await run('en', 'en');
+  assert.deepEqual(counts, allBefore);
+  report.push('H: Manual English never searches external sources');
+  before = llmCalls;
+  await send({ type: 'RUN', tabId, mode: 'en' });
+  await waitDone();
+  assert.equal(llmCalls, before);
+  report.push('Repeated progressive translation reuses IndexedDB without LLM calls');
+  const s = (await send({ type: 'GET_SETTINGS' })).settings;
+  assert.equal(
+    (
+      await run('gemini', 'auto', {
+        translation: {
+          ...s.translation,
+          provider: 'gemini',
+          geminiApiKey: 'test-gemini-key',
+          geminiModel: 'test-model',
+        },
+      })
+    ).source,
+    'jimaku',
+  );
+  assert.equal(geminiCalls, 1);
+  assert((await send({ type: 'GET_STATUS', tabId })).status.path.includes('Gemini'));
+  report.push('Gemini JA translation uses the same progressive queue with validated JSON');
+  await run('en', 'en');
+  assert.equal(geminiCalls, 2);
+  report.push('Gemini EN translation uses its English prompt and shared queue');
+  const storage = await send({ type: 'GET_SETTINGS' });
+  assert(!('providers' in storage.settings));
+  assert.equal(storage.settings.schemaVersion, 2);
+  report.push('J: legacy settings migrated without obsolete provider credentials');
+  assert(!(await site.content()).includes('test-jimaku-key'));
+  const contentStorage = await site.evaluate(async () => {
     try {
       return await chrome.storage.local.get('settings');
     } catch {
       return null;
     }
   });
-  assert(!rawStorage?.settings);
-  report.push('Webpage DOM and content context cannot read API keys');
-  await popup.getByRole('button', { name: '+0.5s', exact: true }).click();
-  await popup.getByText('+0.5s', { exact: true }).waitFor();
-  report.push('Sync offset saved and applied');
-  await site.evaluate(() => history.pushState({}, '', '?ep=2'));
-  await popup
-    .getByRole('status')
-    .filter({ hasText: '한국어 자막 적용 완료' })
-    .waitFor({ timeout: 20000 });
-  await new Promise((r) => setTimeout(r, 1200));
-  const status = await worker.evaluate(
-    async (tabId) => (await chrome.storage.session.get('job:' + tabId))['job:' + tabId],
-    tabId,
-  );
-  assert.equal(status.context.episode, 2);
-  report.push('SPA EP1 → EP2 cancels old state and automatically applies new subtitles');
-  const settings = await context.newPage();
-  await settings.goto('chrome-extension://' + id + '/settings.html');
-  await settings.getByRole('button', { name: 'Test Connection' }).click();
-  await settings.getByRole('status').filter({ hasText: '연결 성공' }).waitFor({ timeout: 10000 });
-  report.push('Settings connection test lists configured local model');
+  assert(!contentStorage?.settings);
+  report.push('Page MAIN/isolated contexts cannot read API key storage');
+  await send({ type: 'OFFSET', tabId, offset: 0.5 });
+  assert.equal((await send({ type: 'GET_STATUS', tabId })).status.offset, 0.5);
+  report.push('Episode subtitle sync remains functional');
+  await send({ type: 'CANCEL', tabId });
+  await new Promise((r) => setTimeout(r, 1800));
+  assert(!(await send({ type: 'GET_STATUS', tabId })).status);
+  report.push('User cancellation suppresses automatic FRAME_READY restart');
+  // Exercise visible UI: only auto/manual by default; three choices appear in manual.
+  await popup.getByText('수동', { exact: true }).click();
+  assert.equal(await popup.locator('input[name="mode"]').count(), 3);
+  await popup.getByText('자동', { exact: true }).click();
+  assert.equal(await popup.locator('input[name="mode"]').count(), 0);
+  report.push('Popup has Auto/Manual and exactly three independent manual choices');
+  const options = await context.newPage();
+  await options.goto('chrome-extension://' + id + '/settings.html');
+  assert.equal(await options.locator('details input').count(), 1);
+  assert.equal(await options.getByRole('heading', { name: '자막 자동 검색 설정' }).count(), 1);
   await mkdir('qa', { recursive: true });
   await popup.screenshot({ path: 'qa/popup.png', fullPage: true });
-  await settings.screenshot({ path: 'qa/settings.png', fullPage: true });
+  await options.screenshot({ path: 'qa/settings.png', fullPage: true });
   await writeFile(
     'qa/browser-report.json',
     JSON.stringify(
-      { browser: opts.channel ?? 'chromium', tests: report, passed: report.length },
+      {
+        browser: 'Chromium isolated MV3',
+        passed: report.length,
+        tests: report,
+        llmCalls,
+        geminiCalls,
+        counts,
+      },
       null,
       2,
     ),

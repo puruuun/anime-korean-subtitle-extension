@@ -109,6 +109,7 @@ const profile = await mkdtemp(join(tmpdir(), 'animesub-progressive-'));
 const dist = resolve('dist');
 const options = {
   headless: true,
+  channel: 'chromium',
   ignoreDefaultArgs: ['--disable-extensions'],
   args: ['--disable-extensions-except=' + dist, '--load-extension=' + dist],
   viewport: { width: 1280, height: 900 },
@@ -182,18 +183,6 @@ async function configure(model, immediatePlayback) {
           maxRetry: 1,
           structured: 'json_schema',
         },
-        providers: {
-          subdl: { enabled: false, apiKey: '', priority: 1 },
-          opensubtitles: {
-            enabled: false,
-            apiKey: '',
-            token: '',
-            username: '',
-            password: '',
-            baseUrl: 'https://api.opensubtitles.com/api/v1',
-            priority: 2,
-          },
-        },
         display: { fontSize: 28, bottom: 8, backgroundOpacity: 0.55, outline: 2, maxLines: 3 },
         debug: false,
       };
@@ -204,7 +193,7 @@ async function configure(model, immediatePlayback) {
 }
 async function beginRun() {
   const before = await status();
-  await popup.getByText('사이트 영어 자막 → 한국어', { exact: true }).click();
+  await popup.getByText('사이트 영어 자막 → 한국어 번역', { exact: true }).click();
   await popup.getByRole('button', { name: '한국어 자막 적용', exact: true }).click();
   return eventually(async () => {
     const current = await status();
@@ -244,6 +233,12 @@ function held(first, requestPhase) {
 
 try {
   context = await chromium.launchPersistentContext(profile, options);
+  await context.route('https://api.anissia.net/**', (route) =>
+    route.fulfill({ json: { code: 'ok', data: [] } }),
+  );
+  await context.route('https://subtitles.ajatt.top/**', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<html></html>' }),
+  );
   await context.route('https://graphql.anilist.co/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"data":null}' }),
   );
@@ -328,6 +323,13 @@ try {
   );
   popup = await opened;
   await popup.waitForSelector('.mode');
+  await popup.evaluate((tabId) => chrome.runtime.sendMessage({ type: 'CANCEL', tabId }), tabId);
+  await popup.waitForFunction(() => !document.querySelector('input[name=selection]').disabled);
+  await worker.evaluate(
+    async (tabId) => chrome.storage.session.set({ ['follow:' + tabId]: { enabled: false } }),
+    tabId,
+  );
+  await popup.getByText('수동', { exact: true }).click();
 
   await configure('progressive-normal', false);
   await beginRun();

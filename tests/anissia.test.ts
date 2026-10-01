@@ -4,10 +4,8 @@ import { AnissiaProvider, ANISSIA_SCHEDULE_TTL } from '../src/providers/anissia/
 import { matchAnissiaTitle } from '../src/providers/anissia/titleMatching';
 import { normalizeEpisode } from '../src/anime/episodeNormalizer';
 import { Database } from '../src/storage/database';
-import { SubtitleSearch } from '../src/subtitle/SubtitleSearch';
 import { createProviders } from '../src/providers/createProviders';
 import { defaultSettings } from '../src/storage/settings';
-import type { SubtitleProvider, SubtitleSearchResult } from '../src/providers/SubtitleProvider';
 import { SubtitleLinkResolverChain } from '../src/subtitle/links/SubtitleLinkResolverChain';
 import { SubtitleLinkUnavailable } from '../src/subtitle/links/SubtitleLinkResolver';
 
@@ -136,7 +134,7 @@ describe('automatic Anissia provider', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const providers = createProviders(defaultSettings);
-    expect(providers.map((p) => p.id)).toEqual(['anissia']);
+    expect(providers.map((p) => p.id)).toEqual(['anissia', 'jimaku', 'kitsunekko']);
     expect(await providers[0].search(context, 'ja')).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -193,73 +191,5 @@ describe('automatic Anissia provider', () => {
         pageUrl: caption.website,
       }),
     ).rejects.toBeInstanceOf(SubtitleLinkUnavailable);
-  });
-});
-
-describe('Korean provider priority and outage fallback', () => {
-  const result = (id: string, extra: Partial<SubtitleSearchResult> = {}): SubtitleSearchResult => ({
-    id,
-    providerId: id,
-    title: 'Test Show',
-    release: '',
-    language: 'ko',
-    episode: '12.50',
-    ...extra,
-  });
-  const provider = (id: string, out: SubtitleSearchResult[]): SubtitleProvider => ({
-    id,
-    search: vi.fn(async () => out),
-    download: vi.fn(),
-  });
-  it('uses Anissia → SubDL → OpenSubtitles even if lower providers score more or saved order differs', async () => {
-    const order: string[] = [];
-    const providers = ['opensubtitles', 'subdl', 'anissia'].map((id) => ({
-      ...provider(id, [result(id, id === 'anissia' ? {} : { imdbId: 'tt123' })]),
-      search: async () => {
-        order.push(id);
-        return [result(id, id === 'anissia' ? {} : { imdbId: 'tt123' })];
-      },
-    }));
-    const found = await new SubtitleSearch(providers).search({ ...context, imdbId: 'tt123' }, 'ko');
-    expect(order).toEqual(['anissia', 'subdl', 'opensubtitles']);
-    expect(found.results.map((r) => r.providerId)).toEqual(order);
-    expect(found.results.every((r) => r.autoEligible)).toBe(true);
-  });
-  it('falls through Anissia API failure and does not turn it into a fatal search error when empty', async () => {
-    const down = {
-      ...provider('anissia', []),
-      search: vi.fn(async () => {
-        throw Error('down');
-      }),
-    };
-    const found = await new SubtitleSearch([down, provider('subdl', [result('subdl')])]).search(
-      context,
-      'ko',
-    );
-    expect(found.results[0].providerId).toBe('subdl');
-    expect(found.warnings).toEqual(['anissia 검색 실패']);
-    expect((await new SubtitleSearch([down]).search(context, 'ko')).results).toEqual([]);
-  });
-  it('does not let an incorrect Anissia episode block a verified lower provider', async () => {
-    const found = await new SubtitleSearch([
-      provider('anissia', [result('anissia', { episode: '13' })]),
-      provider('subdl', [result('subdl')]),
-    ]).search(context, 'ko');
-    expect(found.results[0].providerId).toBe('subdl');
-  });
-  it('propagates cancellation rather than treating it as an Anissia outage', async () => {
-    const controller = new AbortController();
-    const next = provider('subdl', [result('subdl')]);
-    const down = {
-      ...provider('anissia', []),
-      search: async () => {
-        controller.abort();
-        throw controller.signal.reason;
-      },
-    };
-    await expect(
-      new SubtitleSearch([down, next]).search(context, 'ko', controller.signal),
-    ).rejects.toMatchObject({ name: 'AbortError' });
-    expect(next.search).not.toHaveBeenCalled();
   });
 });

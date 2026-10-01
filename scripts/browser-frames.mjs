@@ -10,13 +10,20 @@ const manifest = JSON.parse(await readFile(join(dist, 'manifest.json'), 'utf8'))
 manifest.host_permissions.push('https://player.example/*');
 await writeFile(join(dist, 'manifest.json'), JSON.stringify(manifest));
 const context = await chromium.launchPersistentContext(profile, {
-  channel: process.platform === 'win32' ? 'msedge' : undefined,
   headless: true,
+  channel: 'chromium',
   ignoreDefaultArgs: ['--disable-extensions'],
   args: ['--disable-extensions-except=' + dist, '--load-extension=' + dist],
 });
 const report = [];
 try {
+  await context.route('https://graphql.anilist.co/**', (r) => r.fulfill({ json: { data: null } }));
+  await context.route('https://api.anissia.net/**', (r) =>
+    r.fulfill({ json: { code: 'ok', data: [] } }),
+  );
+  await context.route('https://subtitles.ajatt.top/**', (r) =>
+    r.fulfill({ contentType: 'text/html', body: '<html></html>' }),
+  );
   const top =
     '<!doctype html><html><head><title>Test Show - Episode 1 | Re:ANIME</title><script type="application/ld+json">{"@type":"TVEpisode","episodeNumber":"1","partOfSeries":{"name":"Test Show"}}</script></head><body><iframe id="video-player" allow="fullscreen" src="https://player.example/embed"></iframe></body></html>';
   const frame =

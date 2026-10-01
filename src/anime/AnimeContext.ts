@@ -4,6 +4,8 @@ export interface AnimeContext {
   englishTitle?: string;
   romajiTitle?: string;
   nativeTitle?: string;
+  koreanTitle?: string;
+  episodeType?: 'ova' | 'sp' | 'special';
   synonyms?: string[];
   titles?: {
     english?: string;

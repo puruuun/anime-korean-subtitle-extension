@@ -1,11 +1,9 @@
 [
   {
-    "url": "https://www.miruro.to/watch/qFe2jyMO-z1LwHyLlLpGyRUbWSg0g55W/seihantai-na-kimi-to-boku-2nd-season?ep=1",
-    "title": "Watch You and I Are Polar Opposites Season 2 · Miruro",
-    "animeTitle": "You and I Are Polar Opposites Season 2",
-    "headings": [
-      "You and I Are Polar Opposites Season 2"
-    ],
+    "url": "https://www.miruro.to/watch/VBWQSDahmg3SGluIweSC89lZGVWtjM-6/reincarnated-as-a-sword-season-2?ep=1",
+    "title": "Watch Reincarnated as a Sword Season 2 · Miruro",
+    "animeTitle": "Reincarnated as a Sword Season 2",
+    "headings": ["Reincarnated as a Sword Season 2"],
     "videoCount": 0,
     "iframeCount": 1,
     "tracks": [],
@@ -16,16 +14,24 @@
       {
         "type": "BreadcrumbList"
       }
-    ]
+    ],
+    "adapterResult": {
+      "ok": true,
+      "context": {
+        "site": "miruro",
+        "title": "Reincarnated as a Sword Season 2",
+        "episode": 1,
+        "season": 2,
+        "pageUrl": "https://www.miruro.to/watch/VBWQSDahmg3SGluIweSC89lZGVWtjM-6/reincarnated-as-a-sword-season-2?ep=1"
+      }
+    }
   },
   {
     "url": "https://reanime.to/watch/naruto-bjfend?ep=1&lang=sub",
     "title": "Naruto - Episode 1 | Re:ANIME",
-    "headings": [
-      "Episodes"
-    ],
+    "headings": ["Episodes"],
     "videoCount": 0,
-    "frame": "https://flixcloud.cc/e/bo2qdw3m3kjf?v=2&autoPlay=true&skI=false&skO=false&project_r_ts=1790785797332",
+    "frame": "https://flixcloud.cc/e/bo2qdw3m3kjf?v=2&autoPlay=true&skI=false&skO=false&project_r_ts=1790853144172",
     "iframeCount": 2,
     "tracks": [],
     "jsonLD": [
@@ -37,6 +43,25 @@
       {
         "type": "BreadcrumbList"
       }
-    ]
+    ],
+    "adapterResult": {
+      "ok": true,
+      "context": {
+        "site": "reanime",
+        "title": "Naruto",
+        "episode": 1,
+        "year": 2002,
+        "titles": {
+          "english": "Naruto",
+          "romaji": "NARUTO",
+          "japanese": "NARUTO -ナルト-"
+        },
+        "anilistId": 20,
+        "malId": 20,
+        "tmdbId": 46260,
+        "imdbId": "tt0409591",
+        "pageUrl": "https://reanime.to/watch/naruto-bjfend?ep=1&lang=sub"
+      }
+    }
   }
 ]

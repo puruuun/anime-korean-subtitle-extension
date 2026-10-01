@@ -1,0 +1,6 @@
+{
+  "passed": true,
+  "buildKeyBundles": ["dist/serviceWorker.js"],
+  "contentAndMainWorldContainKey": false,
+  "uiBundlesContainKey": false
+}

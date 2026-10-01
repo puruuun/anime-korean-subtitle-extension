@@ -1,188 +1,95 @@
-# Anime Korean Subtitle Translator Extension
+# Anime Korean Subtitle v0.4.0
 
-Miruro / Re:ANIME에서 외부 한국어·일본어 자막 또는 플레이어 영어 자막을 사용하는 Chrome Manifest V3 확장프로그램입니다. TypeScript / Vite / React 기반이며 Chrome 120 이상을 대상으로 합니다.
+Miruro / Re:ANIME의 현재 작품과 회차를 감지하고 한국어 자막을 준비하는 Chrome Manifest V3 확장프로그램입니다. 영상·오디오는 다운로드하거나 전사하지 않습니다.
 
-## 바로 설치하기
+## 다른 컴퓨터에 설치
 
-1. `anime-korean-subtitle-extension.zip`을 압축 해제합니다.
-2. Chrome의 `chrome://extensions`에서 **개발자 모드**를 켭니다.
-3. **압축해제된 확장 프로그램을 로드합니다**를 누릅니다.
-4. `manifest.json`이 들어 있는 `anime-korean-subtitle-extension` 폴더를 선택합니다.
-5. Miruro / Re:ANIME 영상 페이지를 새로고침합니다.
-6. 한국어 자막은 Anissia를 별도 설정 없이 먼저 검색합니다. SubDL / OpenSubtitles 또는 AI 번역을 사용할 때만 **설정**에서 해당 API Key와 번역 서버를 입력합니다.
+1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.4.0.zip`을 받습니다.
+2. ZIP을 폴더에 압축 해제합니다. 그 폴더의 `extension/manifest.json`을 확인합니다.
+3. Chrome에서 `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
+4. **압축해제된 확장 프로그램 로드**를 눌러 `extension` 폴더를 선택합니다.
+5. 설정에서 **Local LLM** 또는 **Gemini API**를 연결합니다. 한국어 원본 자막에는 번역 서버가 필요 없습니다.
+6. Miruro / Re:ANIME 회차를 열거나 새로고침합니다. 외부 플레이어·자막 CDN은 팝업의 **플레이어·자막 접근 허용**으로 해당 도메인만 승인합니다.
 
-이 확장프로그램은 Chrome 웹 스토어에 배포되지 않은 로컬 개발 버전입니다.
+확장 폴더는 설치 후에도 삭제하지 마세요. 업데이트 때는 같은 폴더를 새 버전으로 바꾸고 확장 페이지에서 새로고침하세요. 로그인 정보·개인 API Key는 배포 ZIP에 포함하지 않습니다.
 
-## 자막 모드
+## 자동 / 수동
 
-| 모드                 | 원본                                                   | LLM 사용    | 다른 모드로 자동 이동 |
-| -------------------- | ------------------------------------------------------ | ----------- | --------------------- |
-| 한국어 자막 검색     | Anissia / SubDL / OpenSubtitles 한국어 자막            | 없음        | 없음                  |
-| 일본어 → 한국어      | SubDL / OpenSubtitles 일본어 파일                      | 있음        | 없음                  |
-| 사이트 영어 → 한국어 | 플레이어의 영어 track / TextTrack / 관찰한 자막 리소스 | 있음        | 없음                  |
-| 자동 선택            | 한국어 → 일본어 → 사이트 영어                          | 필요한 경우 | 검색 결과가 없을 때만 |
+기본은 **자동**입니다. 영상이 감지되면 팝업을 열거나 적용 버튼을 누르지 않아도 시작합니다.
 
-AUTO는 인증 실패, 다운로드 실패, 번역 실패, 모호한 검색 결과를 “자막 없음”으로 처리하지 않습니다. 모호한 후보는 직접 선택해야 합니다. 잘못된 회차나 시즌, 회차 정보가 없는 후보는 자동 적용하지 않습니다.
-
-**한국어 자막 적용**으로 시작합니다. 정보가 잘못 잡혔다면 **정보 수정**에서 작품명·시즌·회차를 변경합니다. 작품명을 바꾸면 잘못 매칭된 ID를 제거하고 다시 검색합니다.
-
-한 번 적용한 뒤 회차가 바뀌면 같은 모드로 다시 처리합니다. **자막 끄기 / 취소**는 표시·번역·다음 회차 자동 처리를 중단합니다.
-
-## LM Studio / OpenAI 호환 서버
-
-- Base URL: 서버의 API 루트. 예: `http://127.0.0.1:1234/v1`
-- API Key: 서버가 요구하는 경우 입력
-- Model ID: 서버의 정확한 모델 식별자
-- **Test Connection**: `GET /models`로 연결과 모델 존재를 확인
-- **설정 저장**: 설정과 해당 서버 접근 권한 저장
-
-번역은 `POST {baseUrl}/chat/completions`를 사용합니다. 포트·주소·모델은 고정하지 않습니다. 긴 로컬 번역은 SSE 스트리밍으로 처리하며 표준 JSON 응답도 읽습니다. JSON Schema를 지원하지 않는 서버는 **JSON Object** 또는 **JSON Prompt만 사용**을 선택하세요. 선택한 형식과 관계없이 결과 ID·개수·빈 번역을 검증합니다.
-
-첫 Chunk 기본값은 20 Cue, 다음 Chunk는 45 Cue / 5,000자, 이전 Context 5 Cue, Temperature 0.2, Timeout 120초, 재시도 2회입니다. 처음부터 긴 자막을 보내기 전에 연결을 확인하세요.
-
-LLM에는 `{id,text}`와 이전 대사만 전송합니다. 원본의 시작·종료 시간은 프로그램이 보존합니다. 실패한 Chunk만 재시도하며 완료한 Chunk는 IndexedDB에 저장합니다.
-
-## 점진적 번역과 재생 버퍼 (v0.2.0)
-
-전체 자막을 먼저 파싱한 뒤 첫 Chunk는 기본 20개 Cue, 다음 Chunk는 기본 45개 Cue로 나눕니다. 문자 수 제한도 함께 적용합니다. 첫 Chunk가 끝나면 즉시 한국어 자막을 추가하고, 나머지는 Service Worker에서 한 번에 한 Chunk씩 번역합니다.
-
-- 일반 모드: 원래 재생 중인 영상은 첫 Chunk를 준비하는 동안만 잠시 멈추고 준비되면 이어서 재생합니다. 사용자가 직접 선택한 일시정지는 유지합니다.
-- 즉시 재생 모드: 재생을 멈추지 않습니다. 플레이어에서 선택한 기존 영어 자막은 현재 위치의 한국어가 준비되면 자동 전환되고, 미번역 위치로 seek하면 다시 원본 자막을 사용할 수 있습니다.
-- 목표 Buffer는 기본 300초입니다. 현재 재생 위치와 그 뒤 5분의 미번역 Chunk를 우선하고, 이후에도 남은 회차 전체를 끝까지 처리합니다.
-- seek하면 새 위치 주변 Chunk의 우선순위를 높이고 관련 없는 진행 중 요청은 AbortController로 취소합니다. 취소한 Chunk는 pending으로 돌아갑니다.
-- Chunk 상태는 pending / translating / completed / failed입니다. 실패한 Chunk만 지정 횟수만큼 재시도하며 다른 구간의 완료 자막은 계속 사용할 수 있습니다.
-- 각 완료 Chunk는 IndexedDB에 저장한 뒤 메모리 자막 Store와 Renderer에 즉시 추가됩니다. 다시 적용하면 완료된 Chunk를 재사용하고 빠진 구간만 번역합니다.
-- v0.1.0의 검증된 전체 회차 캐시도 새 Chunk 형식으로 변환해 재사용합니다. 이전 버전의 부분 캐시는 Chunk 경계와 Context 키가 달라 다시 번역할 수 있습니다.
-- Popup과 영상 Overlay에 번역 상태, 현재 재생 시각, 연속 번역 완료 위치와 Buffer를 표시합니다. 미번역 구간 뒤의 완료 자막을 연결된 Buffer로 계산하지 않습니다.
-- SPA 회차 전환과 취소는 이전 API 요청·Queue·표시를 중단하고 새 epoch의 회차 Queue를 시작합니다.
-
-300초는 유지하려는 목표입니다. 첫 Chunk 직후, 큰 seek 직후 또는 모델 번역 속도가 재생을 따라가지 못하면 실제 Buffer는 그보다 짧을 수 있습니다. Buffer가 부족하다고 영상 재생을 전체 번역 완료까지 막지는 않습니다. 짧은 영상은 남은 재생 길이까지만 확보할 수 있습니다.
-
-이미 설치한 버전은 Chrome의 chrome://extensions에서 확장프로그램을 새로고침한 뒤 영상 페이지도 새로고침하세요. 설정에서 첫 Chunk 크기(15~25개), 목표 Buffer(60~1800초), 즉시 재생을 조정할 수 있습니다.
-
-## 자막 Provider
-
-### Anissia (v0.3.0)
-
-API Key나 사용 설정 없이 자동으로 활성화합니다. 한국어 검색 순서는 **Anissia → SubDL → OpenSubtitles**이며 저장된 일본어 Priority와 관계없이 유지됩니다. Anissia API 장애는 경고로 표시하고 다음 Provider로 검색을 계속합니다.
-
-- 편성표 week 0~8을 모두 조회·병합하고 animeNo로 중복을 제거합니다. IndexedDB에서 5분간 캐시하고, 일부 주차 조회 실패는 완전한 편성표로 캐시하지 않습니다.
-- 한국어 제목·원제와 현재 작품의 영어·로마자·원어·동의어를 비교합니다. 대소문자, Unicode, 공백, 구두점을 정규화하며 2기 / 第2期 / Season 2를 구분합니다. 시작·종료 연도가 현재 작품의 연도와 충돌하면 다른 작품으로 처리합니다.
-- 자막 API의 episode를 문자열로 비교합니다. 예를 들어 `012.50`과 `12.5`는 같은 회차이며 `12`와 `12.5`는 다릅니다. 준비 중인 빈 website는 제외하고 제작자가 여러 명이면 모두 후보로 표시합니다.
-- website는 **배포 페이지**로 취급합니다. 팝업에서 제작자·업데이트 시각을 확인하고 **배포 페이지 열기**로 방문할 수 있습니다.
-- 해당 페이지나 파일 도메인의 접근 권한이 필요하면 **접근 허용 후 적용**을 누릅니다. 파일이 다른 CDN에 있으면 그 도메인도 별도로 허용할 수 있습니다.
-- DirectFileResolver가 URL·Content-Disposition·Content-Type·파일 내용을 확인합니다. GenericHtmlResolver는 정적 HTML 첨부 링크에서 SMI / SRT / ASS / VTT / ZIP을 찾습니다. ZIP의 SMI와 한국어 SAMI 자막도 읽습니다.
-- 파일이 없거나 여러 파일의 회차를 확정할 수 없거나 로그인·스크립트·확인할 수 없는 리디렉션이 필요하면 자동 다운로드를 중단하고 원래 배포 페이지를 제공합니다.
-
-Resolver는 Provider와 분리되어 있습니다. `SubtitleLinkResolverChain`에서 DirectFileResolver와 GenericHtmlResolver 사이에 TistoryResolver / NaverBlogResolver / GoogleDriveResolver 같은 사이트 전용 구현을 추가할 수 있습니다. 이 버전은 범용 HTML 탐색을 구현하며 해당 사이트의 전용 Resolver는 포함하지 않습니다.
-
-편성표에 없는 과거 작품 또는 해당 회차 자막이 등록되지 않은 작품은 다음 Provider로 넘어갑니다. 자동으로 회차를 추측하거나 다른 회차의 자막을 적용하지 않습니다.
-
-### SubDL
-
-Settings에 SubDL API Key를 입력합니다. 문서화된 v1 검색 API를 사용하며 한국어 `KO`, 일본어 `JA`, 회차·시즌, 작품 ID와 제목 후보로 검색합니다. 묶음 자막은 가능한 경우 Provider가 제공하는 회차별 파일을 사용합니다.
-
-### OpenSubtitles
-
-API Key와 Token 또는 Username / Password를 입력합니다. **로그인 / Token 저장**으로 인증할 수 있습니다. 로그인 응답이 지정한 일반 / VIP 서버를 사용합니다. 다운로드에는 유효한 사용자 인증과 서비스의 다운로드 한도가 필요합니다.
-
-일본어 검색에서 작은 Priority 숫자가 우선입니다. 한국어 검색은 Anissia → SubDL → OpenSubtitles로 고정됩니다. 작품명만 일치한다고 자동 적용하지 않으며 회차 정보가 반드시 확인되어야 합니다.
-
-## iframe / 사이트 영어 자막
-
-두 사이트의 현재 재생 페이지는 외부 iframe을 사용할 수 있습니다.
-
-1. 영상 플레이어가 나타난 뒤 확장 버튼을 엽니다.
-2. **플레이어·자막 접근 허용** 버튼이 있으면 해당 도메인의 접근을 허용합니다.
-3. 사이트를 새로고침해 초기 자막 API 응답을 관찰하게 합니다.
-4. 사이트 플레이어에서 **English** 자막을 선택하고 원하는 모드를 실행합니다.
-
-허용한 플레이어 도메인은 다음 방문부터 MAIN / ISOLATED 스크립트를 `document_start`에 주입합니다. 상위 페이지는 작품 정보를, 실제 video 프레임은 자막 표시를 담당합니다. 플레이어나 CDN 도메인이 변경되면 해당 도메인 권한이 추가로 필요할 수 있습니다.
-
-영어 자막은 track → TextTrack → 공개 플레이어 / 자막 응답 → 자막 URL → HLS subtitle rendition 순으로 읽습니다. HLS는 WebVTT 텍스트 세그먼트를 지원합니다. 영상·오디오 세그먼트나 DRM 자막은 처리하지 않습니다.
-
-## 표시 / 싱크
-
-글자 크기, 아래 위치, 배경 불투명도, Outline, 최대 줄 수를 설정합니다. 영상의 `currentTime + offset`으로 Cue를 표시합니다.
-
-- `−0.5s` / `Reset` / `+0.5s`
-- 범위: −10 ~ +10초
-- 양수 Offset은 자막을 앞당깁니다.
-- 작품·시즌·회차별로 저장합니다.
-- 컨테이너 전체화면은 Overlay, video 자체 전체화면은 별도 한국어 TextTrack을 사용합니다.
-- video 자체 전체화면의 세부 스타일은 브라우저 자막 설정을 따를 수 있습니다.
-
-## 캐시
-
-다운로드와 번역 캐시는 확장프로그램 소유 IndexedDB에 보관합니다. 다운로드는 24시간 뒤 다시 확인합니다. 번역 캐시는 작품·시즌·회차·언어·원본 SHA-256·서버·모델·프롬프트 버전·Chunk / Context 설정을 구분합니다.
-
-브라우저를 재시작해도 같은 자막의 번역을 재사용합니다. Worker가 중단되어도 **한국어 자막 적용**을 다시 누르면 완료된 Chunk를 캐시에서 복구합니다. 원본 자막이 변경됐거나 새로 받아야 하면 Settings에서 **자막 캐시 비우기**를 사용하세요.
-
-## 소스에서 빌드
-
-Node.js 22.12 이상 또는 24 LTS를 권장합니다.
-
-```sh
-npm install
-npm run typecheck
-npm test
-npm run build
+```text
+Anissia 한국어 자막 → 바로 표시
+         ↓ 실제 파일 해석/다운로드/파싱 실패
+Jimaku 일본어 자막 → 한국어 점진 번역
+         ↓ 키 없음, HTTP 오류, 회차 파일 없음, 파일 파싱 실패
+Kitsunekko 미러 일본어 자막 → 한국어 점진 번역
+         ↓ 실제 사용 가능한 회차 파일 없음
+사이트 내장 영어 자막 → 한국어 점진 번역
 ```
 
-이 작업 환경에서는 다음 명령을 실제 검증했습니다.
+후보가 발견됐다는 것만으로 성공하지 않습니다. 정확한 회차 파일을 다운로드하고 파싱해야 다음 단계를 생략합니다. 한국어 자막이 준비되면 AI를 호출하지 않습니다. 낮은 회차 신뢰도, 시즌 충돌, 다른 작품의 AniList ID는 자동 적용에서 제외합니다.
+
+수동에는 다음 세 경로만 있습니다.
+
+| 선택                           | 실행 경로                       |
+| ------------------------------ | ------------------------------- |
+| 한국어 자막 검색               | Anissia만 사용                  |
+| 일본어 자막 검색 → 한국어 번역 | Jimaku → Kitsunekko만 사용      |
+| 사이트 영어 자막 → 한국어 번역 | 외부 검색 없이 내장 영어만 사용 |
+
+설정의 **자막 자동 검색 설정**에서 세 단계를 각각 끌 수 있습니다. 새 설치에서는 모두 켜져 있습니다. 자막 끄기/취소를 누르면 그 페이지에서는 자동으로 다시 시작하지 않습니다. 다음 회차를 열거나 적용 버튼을 누르면 다시 사용할 수 있습니다.
+
+## 번역 엔진
+
+- **Local LLM**: 기본 `http://127.0.0.1:1234/v1`. LM Studio 또는 OpenAI 호환 로컬 서버를 실행하고 모델을 로드한 다음 Model ID를 입력합니다. 원래 로컬 서버 설정은 업데이트 후 유지됩니다.
+- **Gemini API**: Google AI Studio에서 발급받은 자신의 API Key를 입력합니다. **Test Connection**으로 계정에서 사용 가능한 Model ID를 확인하고 선택합니다. 일본어와 영어 모두 같은 선택 엔진을 사용하며 언어별 프롬프트는 분리합니다.
+
+기존 `TranslationProvider`와 `TranslationQueue`를 재사용합니다. 처음 기본 20 Cue만 번역한 뒤 즉시 렌더러에 반영하고, 나머지는 기본 45 Cue씩 계속 번역합니다. 매 Chunk를 검증·IndexedDB에 저장하고 화면에 전달합니다. 회차 전환은 검색·다운로드·진행 중인 모델 요청을 취소하며, Seek는 해당 구간의 번역 우선순위를 높입니다.
+
+번역 캐시 키에는 작품/회차, source (`anissia`, `jimaku`, `kitsunekko`, `embedded-en`), 원본 Cue hash, 언어, 엔진, endpoint, model, prompt version, Chunk 설정을 포함합니다. 같은 원본/엔진/설정으로 다시 적용하면 준비된 Chunk를 재사용합니다. 원본 다운로드 캐시는 24시간이며 서비스 파일이 변경되면 갱신 후 새 hash로 번역합니다.
+
+## 자막 소스
+
+### Anissia
+
+별도 API Key가 없습니다. 실제 공개 API의 `{code:"ok",data:[...]}`와 bare array를 처리합니다. 0~8 편성표를 병합하고 전체 정상 응답을 5분 캐싱합니다. 원제, 영어, 로마자, 한국어, 별칭과 시즌/Part/Cour/연도 정보를 확인하고 회차 caption을 찾습니다.
+
+`website`는 배포 페이지일 수 있습니다. DirectFileResolver / GenericHtmlResolver가 SMI / SRT / ASS / SSA / VTT / ZIP 또는 정적 파일 링크를 해석합니다. 배포 도메인은 수동 후보의 **접근 허용 후 적용**으로 승인할 수 있습니다. 권한이 없거나 링크를 안전하게 해석할 수 없으면 AUTO는 다음 소스로 진행합니다. 로그인이 필요한 페이지, JavaScript로 생성되는 다운로드, 복잡한 블로그 페이지는 지원하지 않을 수 있습니다.
+
+### Jimaku
+
+고급 설정의 **Jimaku API Key**는 선택 사항입니다. 키가 없으면 조용히 Kitsunekko로 넘어갑니다. AniList ID가 있으면 우선 조회하며, ID가 없을 때 제목 별칭을 사용합니다. API의 best-effort 회차 결과를 그대로 믿지 않고 파일명을 다시 검증합니다. 401 / 403 / 429 / timeout / 서버 오류도 다음 소스로 진행합니다.
+
+빌드 시 `JIMAKU_API_KEY` 환경변수 또는 로컬 `.env`를 사용할 수도 있습니다. 이 값은 service worker에만 삽입되며 팝업·설정·Content Script·MAIN bundle에는 포함되지 않습니다. 공개 배포는 키 없이 빌드하는 것이 기본입니다. 확장 파일에 삽입된 빌드 키는 배포 파일을 가진 사용자가 읽을 수 있습니다.
+
+### Kitsunekko 미러
+
+[Ajatt-Tools/kitsunekko-mirror](https://github.com/Ajatt-Tools/kitsunekko-mirror)의 [현재 HTML 카탈로그](https://subtitles.ajatt.top/)를 사용합니다. REST 자막 API로 가정하지 않습니다. 일본어/로마자/영어 작품명과 별칭을 카탈로그 행과 매칭하고 상세 페이지의 공식 GitHub 원본 파일 링크를 읽습니다. 카탈로그는 6시간 캐싱합니다.
+
+SRT / ASS / SSA / VTT를 지원합니다. `01`, `E01`, `EP01`, `Episode 01`, `S01E01`, `12.5`를 보수적으로 인식합니다. OVA / SP / Special은 일반 회차와 섞지 않으며 context에 동일한 유형이 확인될 때만 사용합니다. 현재 사이트의 일반 회차 UI는 숫자 회차를 사용합니다. 숫자가 모호하거나 묶음 파일이면 자동 적용하지 않습니다.
+
+## 보안과 권한
+
+API 요청은 service worker에서 수행합니다. local/session storage는 `TRUSTED_CONTEXTS`로 제한하며 페이지·Content Script에 API Key나 전체 설정을 전달하지 않습니다. MAIN bridge는 기존 공개 자막 응답을 읽기만 합니다. 자막 다운로드는 쿠키 없이 수행하고 크기를 제한합니다.
+
+필수 권한은 지원 사이트, Anissia, Jimaku, 미러 카탈로그/파일, Gemini, localhost로 제한합니다. 선택적 HTTP/HTTPS 권한은 사용자가 선택한 플레이어·자막·로컬 서버 도메인을 승인할 때만 사용합니다. 한국어 단계 전체 10초, 각 일본어 Provider 전체 8초, 내장 영어 단계 전체 10초를 넘기면 다음 경로로 진행합니다. 번역 timeout은 별도 설정입니다.
+
+## 개발 및 검증
+
+Node.js 22 이상을 권장합니다.
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm run typecheck
-pnpm test
-pnpm build
-```
-
-빌드 결과는 `dist/`입니다. 번들에는 외부 JavaScript 로딩과 eval이 없습니다.
-
-브라우저 통합 테스트:
-
-```sh
-# Windows에서는 설치된 Edge의 격리된 테스트 프로필 사용
-npm run test:browser
-
-# iframe / fullscreen 별도 검증
-node scripts/browser-frames.mjs
-
-# 다른 환경은 Playwright Chromium 설치 후 실행
+npm ci
+npm run check
 npx playwright install chromium
+npm run test:browser
+npm run test:browser:progressive
+node scripts/browser-frames.mjs
+node scripts/verify-services.mjs
+node scripts/verify-live-provider.mjs
+node scripts/research-live.mjs
 ```
 
-`ANIMESUB_BROWSER_CHANNEL`로 첫 번째 브라우저 테스트의 Chrome / Edge 채널을 지정할 수 있습니다. 프레임 테스트는 headless 권한 대화상자 제한 때문에 **테스트 복사본에만** 테스트 플레이어 도메인을 미리 허용합니다. 배포 manifest의 권한은 변경하지 않습니다.
+`dist/`는 Chrome에 로드할 결과물입니다. `npm run check`는 typecheck, unit tests, build를 실행합니다. 브라우저 검사는 격리된 실제 MV3 확장과 모의 서비스/번역 응답을 사용합니다. 실제 서비스 확인은 `qa/services-report.json`, 실제 페이지에서 실행한 두 Adapter 결과는 `qa/live-site-research.json`에 기록합니다. 상세 검증 범위와 제한은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
 
-## 구조
-
-- `src/sites/miruro`, `src/sites/reanime`: 실제 사이트 DOM / 메타데이터 Adapter
-- `src/anime`: 공통 AnimeContext, 제목 후보, ID 보강
-- `src/providers`: SubDL / OpenSubtitles 인터페이스와 구현
-- `src/subtitle`: 검색 평가, Parser, ZIP, Overlay, HLS, 모드 처리
-- `src/translation`: Provider, Chunk, 프롬프트, ID 검증, 번역 캐시
-- `src/background`: API 호출, 신뢰된 메시지 처리, frame 전달
-- `src/content`: 영상·SPA 탐지, 읽기 전용 페이지 bridge
-- `src/ui`: React Popup / Settings
-- `tests`, `qa`: 자동 검증과 브라우저 검사 결과
-
-## 보안과 처리 범위
-
-API Key / Token / Password는 확장프로그램의 로컬 저장소에 보관합니다. `TRUSTED_CONTEXTS`로 Content Script 접근을 차단하고 설정·번역 요청은 확장 UI만 시작할 수 있게 합니다. API 호출은 Service Worker에서 수행합니다. 페이지 bridge는 필요한 공개 메타데이터와 자막 주소만 전달합니다. 로그에는 키·URL·요청 본문·자막 본문을 기록하지 않습니다.
-
-음성 인식, Whisper, 오디오 캡처·추출·전사, 영상 다운로드·재인코딩 기능은 구현하지 않았습니다. VTT export는 후속 기능입니다.
-
-## 확인된 상태와 남은 현장 검증
-
-구현·빌드와 자동 검증은 완료했습니다. 단위 테스트 86개와 모의 Provider / 로컬 모델을 사용하는 브라우저 검사 31개가 통과했습니다. 실제 Miruro / Re:ANIME의 현재 DOM과 공개 번들, Anissia 공개 API 응답도 확인했습니다.
-
-**사용자 API Key와 실제 LM Studio 모델이 제공되지 않았으므로 실제 Provider의 자막 가용성, 계정 한도, 실제 작품의 번역 품질과 릴리즈 싱크는 현장 검증이 남아 있습니다.** 브라우저 권한 대화상자 승인, player의 closed shadow DOM / 독자 자막 엔진, HLS timestamp discontinuity는 플레이어별 확인이 필요합니다. 사이트가 DOM / API를 변경하면 Adapter나 자막 탐지 규칙을 갱신해야 할 수 있습니다.
-
-검사 범위와 실제 조사 근거는 `DEVELOPMENT.md`를 참고하세요.
-
-## GitHub 저장소
-
-비공개 저장소: [puruuun/anime-korean-subtitle-extension](https://github.com/puruuun/anime-korean-subtitle-extension)
-
-전체 소스는 저장소 루트에 있고, 설치용 ZIP은 releases/anime-korean-subtitle-extension.zip에 있습니다. 소스에서 다시 빌드하면 dist/ 폴더를 Chrome에 로드할 수 있습니다.
+자막 렌더러, 회차별 싱크, fullscreen, seek와 progressive buffer UI는 유지됩니다. ASS는 시간·대사 중심으로 처리하며 고급 스타일을 보존하지 않습니다. HLS는 WebVTT subtitle segment만 읽습니다.

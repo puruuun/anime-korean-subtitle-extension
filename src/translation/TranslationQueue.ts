@@ -66,6 +66,7 @@ export class TranslationQueue {
   private bootstrapReady = false;
   private running = false;
   private episodeSignal?: AbortSignal;
+  private sourceId = 'embedded-en';
 
   constructor(
     private provider: TranslationProvider,
@@ -121,6 +122,7 @@ export class TranslationQueue {
     language: 'ja' | 'en',
     callbacks: TranslationQueueCallbacks,
     signal?: AbortSignal,
+    sourceId = language === 'en' ? 'embedded-en' : 'external-ja',
   ): Promise<SubtitleCue[]> {
     if (this.running) throw new AppError('QUEUE', '이미 번역 중인 회차입니다.');
     signal?.throwIfAborted();
@@ -129,6 +131,7 @@ export class TranslationQueue {
     this.running = true;
     this.callbacks = callbacks;
     this.episodeSignal = signal;
+    this.sourceId = sourceId;
     this.bootstrapReady = false;
     // Sorting copies the array, never modifies cue IDs, timecodes, or the caller's input.
     this.source = [...cues].sort((a, b) => a.startTime - b.startTime || a.endTime - b.endTime);
@@ -137,7 +140,13 @@ export class TranslationQueue {
     try {
       // Earlier releases cached an entire episode with the caller's original cue order.
       // Valid completed legacy episodes can be split into progressive chunks without an API call.
-      const legacyKey = await translationKey(context, JSON.stringify(cues), language, this.config);
+      const legacyKey = await translationKey(
+        context,
+        JSON.stringify(cues),
+        language,
+        this.config,
+        this.sourceId,
+      );
       signal?.throwIfAborted();
       await this.prepare(context, language, signal);
       this.emitState();
@@ -205,7 +214,11 @@ export class TranslationQueue {
           if (active.preempted) chunk.state = 'pending';
           else {
             chunk.state = 'failed';
-            log('TranslationQueue', { chunk: chunk.index + 1, failed: true });
+            log('TranslationQueue', {
+              chunk: chunk.index + 1,
+              failed: true,
+              reason: error instanceof Error ? error.message : 'unknown',
+            });
           }
         } finally {
           if (this.active === active) this.active = undefined;
@@ -250,7 +263,13 @@ export class TranslationQueue {
       : [];
     const root =
       'progressive:v1:' +
-      (await translationKey(context, JSON.stringify(this.source), language, this.config)) +
+      (await translationKey(
+        context,
+        JSON.stringify(this.source),
+        language,
+        this.config,
+        this.sourceId,
+      )) +
       ':initial:' +
       initialCount;
     signal?.throwIfAborted();
@@ -322,6 +341,12 @@ export class TranslationQueue {
     for (let failures = 0; ; failures++) {
       signal.throwIfAborted();
       chunk.attempts++;
+      log('Translation', {
+        source: language,
+        provider: this.provider.id,
+        chunk: chunk.index + 1,
+        total: this.chunks.length,
+      });
       this.emitState();
       try {
         const raw = await this.provider.translate(input, {

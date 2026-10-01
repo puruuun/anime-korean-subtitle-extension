@@ -1,10 +1,15 @@
 import { chromium } from 'playwright';
-import { writeFile, mkdir } from 'node:fs/promises';
-const browser = await chromium.launch({
-  channel: process.platform === 'win32' ? 'msedge' : undefined,
+import { writeFile, mkdir, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+const profile = await mkdtemp(join(tmpdir(), 'animesub-live-'));
+const dist = resolve('dist');
+const context = await chromium.launchPersistentContext(profile, {
+  channel: 'chromium',
   headless: true,
+  ignoreDefaultArgs: ['--disable-extensions'],
+  args: ['--disable-extensions-except=' + dist, '--load-extension=' + dist],
 });
-const context = await browser.newContext();
 const findings = [];
 await context.route('**/*', (route) => {
   const r = route.request();
@@ -47,6 +52,13 @@ try {
           }
         }),
       }));
+      const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
+      data.adapterResult = await worker.evaluate(async (url) => {
+        const tab = (await chrome.tabs.query({})).find((t) => t.url === url);
+        return chrome.tabs
+          .sendMessage(tab.id, { type: 'CONTEXT' }, { frameId: 0 })
+          .catch((e) => ({ error: e.message }));
+      }, data.url);
       findings.push(data);
     } catch (e) {
       findings.push({ initial, error: e.message });
@@ -57,5 +69,5 @@ try {
   await writeFile('qa/live-site-research.json', JSON.stringify(findings, null, 2));
   console.log(JSON.stringify(findings, null, 2));
 } finally {
-  await browser.close();
+  await context.close();
 }

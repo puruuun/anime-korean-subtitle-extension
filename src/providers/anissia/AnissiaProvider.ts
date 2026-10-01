@@ -7,7 +7,7 @@ import type {
   SourceLanguage,
   SubtitleProvider,
   SubtitleSearchResult,
-  SubtitleCandidate,
+  AnissiaSubtitleCandidate,
 } from '../SubtitleProvider';
 import { matchAnissiaTitle, type AnissiaAnime } from './titleMatching';
 import { SubtitleLinkResolverChain } from '../../subtitle/links/SubtitleLinkResolverChain';
@@ -38,17 +38,17 @@ export class AnissiaProvider implements SubtitleProvider {
     private cache: Pick<Database, 'get' | 'put'> = database,
     private now: () => number = Date.now,
   ) {}
-  private async schedules(): Promise<AnissiaAnime[]> {
+  private async schedules(signal = this.signal): Promise<AnissiaAnime[]> {
     const key = 'anissia:schedule:v1';
     const cached = await this.cache.get<ScheduleCache>(key).catch(() => undefined);
-    this.signal?.throwIfAborted();
+    signal?.throwIfAborted();
     if (cached && cached.expiresAt > this.now() && Array.isArray(cached.items)) return cached.items;
     const weeks = await Promise.allSettled(
       Array.from({ length: 9 }, (_, week) =>
-        requestJSON<unknown>(API + 'schedule/' + week, {}, 8000, this.signal).then(rows),
+        requestJSON<unknown>(API + 'schedule/' + week, {}, 8000, signal).then(rows),
       ),
     );
-    this.signal?.throwIfAborted();
+    signal?.throwIfAborted();
     const available = weeks.flatMap((week) => (week.status === 'fulfilled' ? week.value : []));
     if (weeks.every((week) => week.status === 'rejected'))
       throw new AppError('ANISSIA_API', 'Anissia 편성표에 연결할 수 없습니다.');
@@ -83,25 +83,24 @@ export class AnissiaProvider implements SubtitleProvider {
     }
     return items;
   }
-  async search(c: AnimeContext, language: SourceLanguage): Promise<SubtitleCandidate[]> {
+  async search(
+    c: AnimeContext,
+    language: SourceLanguage,
+    signal = this.signal,
+  ): Promise<AnissiaSubtitleCandidate[]> {
     if (language !== 'ko') return [];
     const episode = normalizeEpisode(c.episode);
     if (episode === undefined) return [];
-    const matches = (await this.schedules()).flatMap((anime) => {
+    const matches = (await this.schedules(signal)).flatMap((anime) => {
       const matchedTitle = matchAnissiaTitle(c, anime);
       return matchedTitle ? [{ anime, matchedTitle }] : [];
     });
     const requests = await Promise.allSettled(
       matches.map(async ({ anime, matchedTitle }) => {
         const captions = rows(
-          await requestJSON<unknown>(
-            API + 'caption/animeNo/' + anime.animeNo,
-            {},
-            8000,
-            this.signal,
-          ),
+          await requestJSON<unknown>(API + 'caption/animeNo/' + anime.animeNo, {}, 8000, signal),
         );
-        return captions.flatMap((row): SubtitleCandidate[] => {
+        return captions.flatMap((row): AnissiaSubtitleCandidate[] => {
           if (
             typeof row.episode !== 'string' ||
             normalizeEpisode(row.episode) !== episode ||
@@ -129,6 +128,7 @@ export class AnissiaProvider implements SubtitleProvider {
               release: anime.subject + ' · ' + author,
               episode: row.episode,
               season: c.season,
+              episodeType: c.episodeType,
               year: /^\d{4}-/.test(anime.startDate)
                 ? Number(anime.startDate.slice(0, 4))
                 : undefined,
@@ -140,7 +140,7 @@ export class AnissiaProvider implements SubtitleProvider {
         });
       }),
     );
-    this.signal?.throwIfAborted();
+    signal?.throwIfAborted();
     if (requests.length && requests.every((r) => r.status === 'rejected'))
       throw new AppError('ANISSIA_API', 'Anissia 자막 목록에 연결할 수 없습니다.');
     return [
@@ -149,8 +149,8 @@ export class AnissiaProvider implements SubtitleProvider {
       ).values(),
     ];
   }
-  async download(candidate: SubtitleSearchResult): Promise<ArrayBuffer> {
-    const resolution = await this.resolver.resolve(candidate, this.signal);
+  async download(candidate: SubtitleSearchResult, signal = this.signal): Promise<ArrayBuffer> {
+    const resolution = await this.resolver.resolve(candidate, signal);
     if (resolution.kind === 'page') throw new SubtitleLinkUnavailable(resolution);
     return resolution.buffer;
   }

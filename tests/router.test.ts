@@ -230,7 +230,7 @@ describe('progressive job lifecycle', () => {
     expect(harness.cores.every((core) => core.signal.aborted)).toBe(true);
     expect(storage.has('job:9')).toBe(false);
     expect(storage.has('render:9')).toBe(false);
-    expect(storage.has('follow:9')).toBe(false);
+    expect(storage.get('follow:9')).toEqual({ enabled: false });
     const sentBefore = harness.sent.length;
     for (const core of harness.cores) {
       core.status({

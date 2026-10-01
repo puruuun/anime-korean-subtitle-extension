@@ -1,8 +1,13 @@
 import { defaultDisplay, type DisplaySettings } from '../subtitle/SubtitleRenderer';
 export interface Settings {
+  schemaVersion: 2;
+  autoSources: { anissia: boolean; japaneseTranslation: boolean; embeddedEnglish: boolean };
+  jimaku: { apiKey: string };
   mode: 'ko' | 'ja' | 'en' | 'auto';
   translation: {
-    provider: 'lmstudio' | 'openai';
+    provider: 'lmstudio' | 'gemini';
+    geminiApiKey: string;
+    geminiModel: string;
     baseUrl: string;
     apiKey: string;
     model: string;
@@ -17,25 +22,18 @@ export interface Settings {
     maxRetry: number;
     structured: 'json_schema' | 'json_object' | 'none';
   };
-  providers: {
-    subdl: { enabled: boolean; apiKey: string; priority: number };
-    opensubtitles: {
-      enabled: boolean;
-      apiKey: string;
-      token: string;
-      username: string;
-      password: string;
-      baseUrl: string;
-      priority: number;
-    };
-  };
   display: DisplaySettings;
   debug: boolean;
 }
 export const defaultSettings: Settings = {
-  mode: 'ko',
+  schemaVersion: 2,
+  mode: 'auto',
+  autoSources: { anissia: true, japaneseTranslation: true, embeddedEnglish: true },
+  jimaku: { apiKey: '' },
   translation: {
     provider: 'lmstudio',
+    geminiApiKey: '',
+    geminiModel: '',
     baseUrl: 'http://127.0.0.1:1234/v1',
     apiKey: '',
     model: '',
@@ -50,43 +48,49 @@ export const defaultSettings: Settings = {
     maxRetry: 2,
     structured: 'json_schema',
   },
-  providers: {
-    subdl: { enabled: true, apiKey: '', priority: 2 },
-    opensubtitles: {
-      enabled: true,
-      apiKey: '',
-      token: '',
-      username: '',
-      password: '',
-      baseUrl: 'https://api.opensubtitles.com/api/v1',
-      priority: 3,
-    },
-  },
   display: defaultDisplay,
   debug: false,
 };
+// Rebuild from an allowlist so retired provider credentials and unknown settings are discarded.
+function known<T extends object>(defaults: T, input?: Partial<T>): T {
+  return Object.fromEntries(
+    Object.entries(defaults).map(([key, value]) => [key, input?.[key as keyof T] ?? value]),
+  ) as T;
+}
 export function normalizeSettings(settings?: Partial<Settings>): Settings {
-  return settings
-    ? {
-        ...defaultSettings,
-        ...settings,
-        translation: { ...defaultSettings.translation, ...settings.translation },
-        providers: {
-          subdl: { ...defaultSettings.providers.subdl, ...settings.providers?.subdl },
-          opensubtitles: {
-            ...defaultSettings.providers.opensubtitles,
-            ...settings.providers?.opensubtitles,
-          },
-        },
-        display: { ...defaultDisplay, ...settings.display },
-      }
-    : structuredClone(defaultSettings);
+  const translation = known(defaultSettings.translation, settings?.translation);
+  if (!['lmstudio', 'gemini'].includes(translation.provider))
+    translation.provider = defaultSettings.translation.provider;
+  const mode = settings?.mode;
+  return {
+    schemaVersion: 2,
+    mode:
+      mode && ['auto', 'ko', 'ja', 'en'].includes(mode)
+        ? settings?.schemaVersion !== 2 && mode === 'ko'
+          ? 'auto'
+          : mode
+        : 'auto',
+    autoSources: known(defaultSettings.autoSources, settings?.autoSources),
+    jimaku: known(defaultSettings.jimaku, settings?.jimaku),
+    translation,
+    display: known(defaultDisplay, settings?.display),
+    debug: settings?.debug === true,
+  };
 }
 export async function getSettings(): Promise<Settings> {
   const stored = await chrome.storage.local.get('settings');
-  return normalizeSettings(stored.settings as Partial<Settings> | undefined);
+  const settings = normalizeSettings(stored.settings as Partial<Settings> | undefined);
+  if (stored.settings && JSON.stringify(stored.settings) !== JSON.stringify(settings))
+    await chrome.storage.local.set({ settings });
+  return settings;
 }
 export function validateSettings(s: Settings) {
+  if (
+    !['auto', 'ko', 'ja', 'en'].includes(s.mode) ||
+    Object.values(s.autoSources).some((v) => typeof v !== 'boolean') ||
+    typeof s.jimaku.apiKey !== 'string'
+  )
+    throw Error('자막 설정을 확인하세요.');
   const u = new URL(s.translation.baseUrl);
   if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.search || u.hash)
     throw Error('Base URL 형식을 확인하세요.');
