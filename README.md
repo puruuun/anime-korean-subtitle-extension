@@ -9,7 +9,7 @@ Miruro / Re:ANIME에서 외부 한국어·일본어 자막 또는 플레이어 �
 3. **압축해제된 확장 프로그램을 로드합니다**를 누릅니다.
 4. `manifest.json`이 들어 있는 `anime-korean-subtitle-extension` 폴더를 선택합니다.
 5. Miruro / Re:ANIME 영상 페이지를 새로고침합니다.
-6. 확장 버튼 → **설정**에서 사용하는 자막 Provider API Key와 번역 서버를 입력합니다.
+6. 한국어 자막은 Anissia를 별도 설정 없이 먼저 검색합니다. SubDL / OpenSubtitles 또는 AI 번역을 사용할 때만 **설정**에서 해당 API Key와 번역 서버를 입력합니다.
 
 이 확장프로그램은 Chrome 웹 스토어에 배포되지 않은 로컬 개발 버전입니다.
 
@@ -17,7 +17,7 @@ Miruro / Re:ANIME에서 외부 한국어·일본어 자막 또는 플레이어 �
 
 | 모드                 | 원본                                                   | LLM 사용    | 다른 모드로 자동 이동 |
 | -------------------- | ------------------------------------------------------ | ----------- | --------------------- |
-| 한국어 자막 검색     | SubDL / OpenSubtitles 한국어 파일                      | 없음        | 없음                  |
+| 한국어 자막 검색     | Anissia / SubDL / OpenSubtitles 한국어 자막            | 없음        | 없음                  |
 | 일본어 → 한국어      | SubDL / OpenSubtitles 일본어 파일                      | 있음        | 없음                  |
 | 사이트 영어 → 한국어 | 플레이어의 영어 track / TextTrack / 관찰한 자막 리소스 | 있음        | 없음                  |
 | 자동 선택            | 한국어 → 일본어 → 사이트 영어                          | 필요한 경우 | 검색 결과가 없을 때만 |
@@ -62,6 +62,22 @@ LLM에는 `{id,text}`와 이전 대사만 전송합니다. 원본의 시작·종
 
 ## 자막 Provider
 
+### Anissia (v0.3.0)
+
+API Key나 사용 설정 없이 자동으로 활성화합니다. 한국어 검색 순서는 **Anissia → SubDL → OpenSubtitles**이며 저장된 일본어 Priority와 관계없이 유지됩니다. Anissia API 장애는 경고로 표시하고 다음 Provider로 검색을 계속합니다.
+
+- 편성표 week 0~8을 모두 조회·병합하고 animeNo로 중복을 제거합니다. IndexedDB에서 5분간 캐시하고, 일부 주차 조회 실패는 완전한 편성표로 캐시하지 않습니다.
+- 한국어 제목·원제와 현재 작품의 영어·로마자·원어·동의어를 비교합니다. 대소문자, Unicode, 공백, 구두점을 정규화하며 2기 / 第2期 / Season 2를 구분합니다. 시작·종료 연도가 현재 작품의 연도와 충돌하면 다른 작품으로 처리합니다.
+- 자막 API의 episode를 문자열로 비교합니다. 예를 들어 `012.50`과 `12.5`는 같은 회차이며 `12`와 `12.5`는 다릅니다. 준비 중인 빈 website는 제외하고 제작자가 여러 명이면 모두 후보로 표시합니다.
+- website는 **배포 페이지**로 취급합니다. 팝업에서 제작자·업데이트 시각을 확인하고 **배포 페이지 열기**로 방문할 수 있습니다.
+- 해당 페이지나 파일 도메인의 접근 권한이 필요하면 **접근 허용 후 적용**을 누릅니다. 파일이 다른 CDN에 있으면 그 도메인도 별도로 허용할 수 있습니다.
+- DirectFileResolver가 URL·Content-Disposition·Content-Type·파일 내용을 확인합니다. GenericHtmlResolver는 정적 HTML 첨부 링크에서 SMI / SRT / ASS / VTT / ZIP을 찾습니다. ZIP의 SMI와 한국어 SAMI 자막도 읽습니다.
+- 파일이 없거나 여러 파일의 회차를 확정할 수 없거나 로그인·스크립트·확인할 수 없는 리디렉션이 필요하면 자동 다운로드를 중단하고 원래 배포 페이지를 제공합니다.
+
+Resolver는 Provider와 분리되어 있습니다. `SubtitleLinkResolverChain`에서 DirectFileResolver와 GenericHtmlResolver 사이에 TistoryResolver / NaverBlogResolver / GoogleDriveResolver 같은 사이트 전용 구현을 추가할 수 있습니다. 이 버전은 범용 HTML 탐색을 구현하며 해당 사이트의 전용 Resolver는 포함하지 않습니다.
+
+편성표에 없는 과거 작품 또는 해당 회차 자막이 등록되지 않은 작품은 다음 Provider로 넘어갑니다. 자동으로 회차를 추측하거나 다른 회차의 자막을 적용하지 않습니다.
+
 ### SubDL
 
 Settings에 SubDL API Key를 입력합니다. 문서화된 v1 검색 API를 사용하며 한국어 `KO`, 일본어 `JA`, 회차·시즌, 작품 ID와 제목 후보로 검색합니다. 묶음 자막은 가능한 경우 Provider가 제공하는 회차별 파일을 사용합니다.
@@ -70,7 +86,7 @@ Settings에 SubDL API Key를 입력합니다. 문서화된 v1 검색 API를 사�
 
 API Key와 Token 또는 Username / Password를 입력합니다. **로그인 / Token 저장**으로 인증할 수 있습니다. 로그인 응답이 지정한 일반 / VIP 서버를 사용합니다. 다운로드에는 유효한 사용자 인증과 서비스의 다운로드 한도가 필요합니다.
 
-작은 Priority 숫자가 우선입니다. 작품명만 일치한다고 자동 적용하지 않으며 회차 정보가 반드시 확인되어야 합니다.
+일본어 검색에서 작은 Priority 숫자가 우선입니다. 한국어 검색은 Anissia → SubDL → OpenSubtitles로 고정됩니다. 작품명만 일치한다고 자동 적용하지 않으며 회차 정보가 반드시 확인되어야 합니다.
 
 ## iframe / 사이트 영어 자막
 
@@ -159,7 +175,7 @@ API Key / Token / Password는 확장프로그램의 로컬 저장소에 보관�
 
 ## 확인된 상태와 남은 현장 검증
 
-구현·빌드와 자동 검증은 완료했습니다. 단위 테스트 59개와 모의 Provider / 로컬 모델을 사용하는 브라우저 검사 22개가 통과했습니다. 실제 Miruro / Re:ANIME의 현재 DOM과 공개 번들도 조사했습니다.
+구현·빌드와 자동 검증은 완료했습니다. 단위 테스트 86개와 모의 Provider / 로컬 모델을 사용하는 브라우저 검사 31개가 통과했습니다. 실제 Miruro / Re:ANIME의 현재 DOM과 공개 번들, Anissia 공개 API 응답도 확인했습니다.
 
 **사용자 API Key와 실제 LM Studio 모델이 제공되지 않았으므로 실제 Provider의 자막 가용성, 계정 한도, 실제 작품의 번역 품질과 릴리즈 싱크는 현장 검증이 남아 있습니다.** 브라우저 권한 대화상자 승인, player의 closed shadow DOM / 독자 자막 엔진, HLS timestamp discontinuity는 플레이어별 확인이 필요합니다. 사이트가 DOM / API를 변경하면 Adapter나 자막 탐지 규칙을 갱신해야 할 수 있습니다.
 

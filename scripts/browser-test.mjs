@@ -59,6 +59,9 @@ if (process.env.ANIMESUB_BROWSER_CHANNEL) opts.channel = process.env.ANIMESUB_BR
 else if (process.platform === 'win32') opts.channel = 'msedge';
 const context = await chromium.launchPersistentContext(profile, opts);
 try {
+  await context.route('https://api.anissia.net/**', (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: '{"code":"ok","data":[]}' }),
+  );
   await context.route('https://graphql.anilist.co/**', (r) =>
     r.fulfill({ status: 200, contentType: 'application/json', body: '{"data":null}' }),
   );

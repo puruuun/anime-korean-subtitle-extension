@@ -349,6 +349,29 @@ select:focus-visible {
   margin-top: 12px;
   padding-top: 10px;
 }
+.automatic-provider {
+  margin-bottom: 12px;
+}
+.subtitle-candidate {
+  border-radius: 10px;
+  padding: 14px;
+  line-height: 1.6;
+}
+.candidate-updated {
+  display: block;
+  margin-top: 4px;
+}
+.candidate-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.candidate-actions button {
+  font-size: 11px;
+  margin: 0;
+  padding: 9px;
+}
 .translation-state {
   color: #e8e1ff;
   font-weight: 650;

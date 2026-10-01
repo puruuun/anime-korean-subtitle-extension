@@ -88,14 +88,16 @@ export async function requestJSON<T>(
     throw new AppError('JSON', 'API 응답 형식이 잘못되었습니다.');
   }
 }
-export function publicSubtitleURL(value: string): string {
+export function publicSubtitleURL(value: string, allowHttp = false): string {
   const u = new URL(value);
   if (
-    u.protocol !== 'https:' ||
+    (u.protocol !== 'https:' && !(allowHttp && u.protocol === 'http:')) ||
     u.username ||
     u.password ||
-    u.hostname === 'localhost' ||
-    /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname) ||
+    /(?:^|\.)(?:localhost|local|internal)$/.test(u.hostname) ||
+    /^(0\.|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|22[4-9]\.|23\d\.|24\d\.|25[0-5]\.)/.test(
+      u.hostname,
+    ) ||
     u.hostname.startsWith('[')
   )
     throw new AppError('URL', '자막 리소스 주소가 허용되지 않습니다.');

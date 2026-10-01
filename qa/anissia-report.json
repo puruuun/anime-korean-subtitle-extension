@@ -1,0 +1,23 @@
+{
+  "browser": "msedge",
+  "passed": 9,
+  "tests": [
+    "Always-enabled Anissia matches native normalized title and decimal episode; header-named SMI renders without keys or LLM",
+    "All nine schedules persist in IndexedDB; caption metadata refreshes and the same downloaded subtitle is cached",
+    "Every ready author is shown for manual selection; blank websites and other episodes are excluded without downloading pages",
+    "A selected author with no clear file keeps every other author available for selection",
+    "Generic HTML resolver follows an explicit attachment link and DirectFileResolver verifies header-named SMI",
+    "Pages without a clear file remain selectable distribution-page links instead of being parsed as subtitle text",
+    "Missing host permission is handed to the popup with an exact-origin action and page URL; no unauthorized fetch occurs",
+    "Settings identify Anissia as automatic and explain the fixed Korean provider priority",
+    "Anissia API outage automatically falls back to SubDL and applies its Korean subtitle without failing the job"
+  ],
+  "fixturePermissions": [
+    "https://blog.example/*",
+    "https://cdn.example/*"
+  ],
+  "scheduleRequests": 18,
+  "captionRequests": 5,
+  "fileRequests": 2,
+  "htmlRequests": 3
+}

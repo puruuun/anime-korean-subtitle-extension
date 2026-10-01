@@ -18,6 +18,7 @@ import { AppError } from '../utils/errors';
 import { TranslationQueue, type TranslationBufferStatus } from '../translation/TranslationQueue';
 import { LMStudioProvider } from '../translation/lmstudio/LMStudioProvider';
 import { OpenAICompatibleProvider } from '../translation/openaiCompatible/OpenAICompatibleProvider';
+import { SubtitleLinkUnavailable } from './links/SubtitleLinkResolver';
 export type Mode = 'ko' | 'ja' | 'en' | 'auto';
 export interface CoreStatus {
   stage: string;
@@ -40,8 +41,9 @@ export class SelectionRequired extends AppError {
   constructor(
     public results: SubtitleSearchResult[],
     public language: SourceLanguage,
+    message = '자막 후보를 직접 선택하세요. 회차와 시즌을 확인하세요.',
   ) {
-    super('SELECT', '자막 후보를 직접 선택하세요. 회차와 시즌을 확인하세요.');
+    super('SELECT', message);
   }
 }
 export class SubtitleCore {
@@ -83,12 +85,19 @@ export class SubtitleCore {
     if (!this.providers.length)
       throw new AppError('CONFIG', 'Settings에서 자막 Provider API Key를 입력하세요.');
     let result = selected;
+    let candidates: SubtitleSearchResult[] = selected ? [selected] : [];
     if (!result) {
       this.status({
         stage: 'search',
         message: language === 'ko' ? '한국어 자막 검색 중...' : '일본어 자막 검색 중...',
       });
       const found = await new SubtitleSearch(this.providers).search(c, language, this.signal);
+      candidates = found.results;
+      this.status({
+        stage: 'search',
+        message: language === 'ko' ? '한국어 자막 검색 중...' : '일본어 자막 검색 중...',
+        warnings: found.warnings,
+      });
       if (!found.results.length)
         throw new AppError(
           'NOT_FOUND',
@@ -117,7 +126,25 @@ export class SubtitleCore {
     const cache = new SubtitleCache();
     let buffer = await cache.get(result.id);
     if (!buffer) {
-      buffer = await provider.download(result);
+      try {
+        buffer = await provider.download(result);
+      } catch (e) {
+        this.signal.throwIfAborted();
+        if (e instanceof SubtitleLinkUnavailable) {
+          const updated = {
+            ...result,
+            pageUrl: e.resolution.pageUrl,
+            requiredOrigins: e.resolution.requiredOrigins,
+            linkMessage: e.message,
+          };
+          throw new SelectionRequired(
+            candidates.map((r) => (r.id === result!.id ? updated : r)),
+            language,
+            e.message,
+          );
+        }
+        throw e;
+      }
       this.signal.throwIfAborted();
       await cache.put(result.id, buffer);
     }

@@ -138,6 +138,15 @@ function SettingsPage() {
           <span className="number">02</span>
           <h2>자막 Provider</h2>
         </div>
+        <div className="provider automatic-provider">
+          <h3>
+            Anissia <span className="badge">자동 활성화</span>
+          </h3>
+          <p className="muted">
+            API Key 없이 한국어 자막을 검색합니다. 제작자가 여러 명이면 후보를 선택하세요.
+          </p>
+          <small>한국어 검색 순서: Anissia → SubDL → OpenSubtitles</small>
+        </div>
         <div className="grid">
           <div className="provider">
             <h3>SubDL</h3>
@@ -159,7 +168,7 @@ function SettingsPage() {
               />
             </label>
             <label>
-              우선순위
+              일본어 검색 우선순위
               <input
                 type="number"
                 min="1"
@@ -219,7 +228,7 @@ function SettingsPage() {
               </label>
             </div>
             <label>
-              우선순위
+              일본어 검색 우선순위
               <input
                 type="number"
                 min="1"
@@ -250,7 +259,7 @@ function SettingsPage() {
           </div>
         </div>
         <p className="muted">
-          작은 우선순위 숫자를 먼저 사용합니다. API Key는 각 서비스에서 발급받으세요.
+          일본어 검색은 작은 우선순위 숫자를 먼저 사용합니다. API Key는 각 서비스에서 발급받으세요.
         </p>
       </section>
       <section>

@@ -10,7 +10,7 @@ export function extractSubtitle(
   let total = 0;
   const files = unzipSync(bytes, {
     filter: (f) => {
-      if (!/\.(srt|vtt|ass|ssa)$/i.test(f.name)) return false;
+      if (!/\.(smi|srt|vtt|ass|ssa)$/i.test(f.name)) return false;
       total += f.originalSize;
       if (total > 24 * 1024 * 1024 || f.originalSize > 8 * 1024 * 1024)
         throw new AppError('SIZE', '압축 자막의 크기가 너무 큽니다.');
@@ -21,8 +21,9 @@ export function extractSubtitle(
   const matching = names.filter(
     (n) =>
       parseEpisode(n) === episode ||
-      Number(n.match(/(?:^|[\s._\[\]-])(\d{1,3})(?:[\s._\]\-]|\.(?:srt|vtt|ass)$)/i)?.[1]) ===
-        episode,
+      Number(
+        n.match(/(?:^|[\s._\[\]-])(\d{1,3}(?:\.\d+)?)(?:[\s._\]\-]|\.(?:smi|srt|vtt|ass)$)/i)?.[1],
+      ) === episode,
   );
   const chosen = matching.length === 1 ? matching[0] : names.length === 1 ? names[0] : undefined;
   if (!chosen)

@@ -15,6 +15,10 @@ export function titleCandidates(c: AnimeContext): string[] {
   return [
     ...new Set(
       [
+        c.nativeTitle,
+        c.englishTitle,
+        c.romajiTitle,
+        ...(c.synonyms ?? []),
         c.titles?.japanese,
         c.titles?.english,
         c.titles?.romaji,

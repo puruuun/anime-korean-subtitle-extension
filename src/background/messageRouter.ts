@@ -347,7 +347,17 @@ async function startJobInternal(
         tabId,
         j,
         e instanceof SelectionRequired
-          ? { stage: 'select', message: e.message, results: e.results }
+          ? {
+              stage: 'select',
+              message: e.message,
+              results: selected
+                ? [
+                    ...new Map(
+                      [...(previous?.status.results ?? []), ...e.results].map((r) => [r.id, r]),
+                    ).values(),
+                  ]
+                : e.results,
+            }
           : { stage: 'error', message: errorText(e) },
       );
     } finally {

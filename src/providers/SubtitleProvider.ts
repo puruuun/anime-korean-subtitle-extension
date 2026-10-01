@@ -6,7 +6,7 @@ export interface SubtitleSearchResult {
   title: string;
   release: string;
   language: SourceLanguage;
-  episode?: number;
+  episode?: number | string;
   season?: number;
   year?: number;
   imdbId?: string;
@@ -16,6 +16,25 @@ export interface SubtitleSearchResult {
   score?: number;
   autoEligible?: boolean;
   reasons?: string[];
+  matchedTitle?: string;
+  pageUrl?: string;
+  author?: string;
+  updatedAt?: string;
+  requiredOrigins?: string[];
+  linkMessage?: string;
+}
+export interface SubtitleCandidate extends SubtitleSearchResult {
+  provider: 'anissia';
+  providerId: 'anissia';
+  episode: string;
+  author: string;
+  pageUrl: string;
+  updatedAt: string;
+  animeNo: number;
+  subject: string;
+  originalSubject: string;
+  startDate: string;
+  endDate: string;
 }
 export interface SubtitleProvider {
   id: string;

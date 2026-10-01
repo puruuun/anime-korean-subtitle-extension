@@ -181,7 +181,16 @@ function Popup() {
             season: season ? Number(season) : undefined,
             titles: title.trim() !== context.title ? undefined : context.titles,
             ...(title.trim() !== context.title
-              ? { anilistId: undefined, malId: undefined, imdbId: undefined, tmdbId: undefined }
+              ? {
+                  anilistId: undefined,
+                  malId: undefined,
+                  imdbId: undefined,
+                  tmdbId: undefined,
+                  englishTitle: undefined,
+                  romajiTitle: undefined,
+                  nativeTitle: undefined,
+                  synonyms: undefined,
+                }
               : {}),
           }
         : undefined;
@@ -309,6 +318,9 @@ function Popup() {
         {status?.translation && (
           <TranslationStatus translation={status.translation} busy={!!status.busy} />
         )}
+        {status?.warnings?.map((warning) => (
+          <small key={warning}>{warning} · 다음 Provider로 계속 검색</small>
+        ))}
       </div>
       {error && (
         <p className="error" role="alert">
@@ -317,14 +329,49 @@ function Popup() {
       )}
       {status?.stage === 'select' &&
         status.results?.map((r) => (
-          <button className="result" key={r.id} disabled={busy} onClick={() => void run(r.id)}>
+          <div className="result subtitle-candidate" key={r.id}>
             <strong>{r.release || r.title}</strong>
             <br />
             {r.providerId} · {r.language.toUpperCase()} ·{' '}
             {r.episode === undefined ? '회차 미확인' : 'EP ' + r.episode} · Score {r.score}
             <br />
             <small>{r.reasons?.join(' · ')}</small>
-          </button>
+            {r.updatedAt && (
+              <small className="candidate-updated">업데이트 {r.updatedAt.replace('T', ' ')}</small>
+            )}
+            {r.linkMessage && <p>{r.linkMessage}</p>}
+            <div className="candidate-actions">
+              <button
+                className="secondary"
+                disabled={busy}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      if (r.requiredOrigins?.length) {
+                        const allowed = await chrome.permissions.request({
+                          origins: r.requiredOrigins,
+                        });
+                        if (!allowed)
+                          throw Error(
+                            '자막 도메인의 접근 권한이 허용되지 않았습니다. 배포 페이지에서 확인하세요.',
+                          );
+                      }
+                      await run(r.id);
+                    } catch (e) {
+                      setError((e as Error).message);
+                    }
+                  })();
+                }}
+              >
+                {r.requiredOrigins?.length ? '접근 허용 후 적용' : '이 자막 적용'}
+              </button>
+              {r.pageUrl && (
+                <a href={r.pageUrl} target="_blank" rel="noreferrer">
+                  배포 페이지 열기 ↗
+                </a>
+              )}
+            </div>
+          </div>
         ))}
       <section className="sync">
         <div className="row">

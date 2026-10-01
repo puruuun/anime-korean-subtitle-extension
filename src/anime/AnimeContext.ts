@@ -1,6 +1,10 @@
 export interface AnimeContext {
   site: 'miruro' | 'reanime';
   title: string;
+  englishTitle?: string;
+  romajiTitle?: string;
+  nativeTitle?: string;
+  synonyms?: string[];
   titles?: {
     english?: string;
     romaji?: string;

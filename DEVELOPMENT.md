@@ -2,6 +2,21 @@
 
 기준일: 2026-10-01 (Asia/Seoul). 이 문서는 구현과 자동 검증, 실제 서비스 현장 검증을 구분합니다.
 
+## v0.3.0 Anissia
+
+- 키·설정 없이 AnissiaProvider를 자동 생성합니다. 한국어 검색 우선순위는 Anissia → SubDL → OpenSubtitles이며 Anissia API 실패만으로 전체 검색을 실패시키지 않습니다.
+- 실제 공개 API에서 `{code:"ok",data:[...]}` 형태와 `name / updDt / episode / website` 필드를 확인했습니다. 공식 문서의 bare array도 처리합니다. [Anissia API 문서](https://github.com/anissia-net/anissia/blob/master/docs/anime_schdule.md).
+- 편성표 0~8을 병렬로 병합하고 animeNo 기준으로 중복을 제거합니다. 전체 성공 결과만 IndexedDB에 5분간 저장합니다. 제목·시즌·연도 범위와 문자열 소수점 회차를 확인합니다.
+- 배포 페이지는 Provider가 파싱하지 않습니다. `src/subtitle/links/`의 Resolver 체인에서 직접 파일·일반 HTML 탐색을 담당합니다. 도메인 권한, 리디렉션 주소, 크기 제한, 쿠키 미전송과 AbortSignal을 처리합니다.
+- 확정할 수 없는 파일·페이지는 SelectionRequired로 팝업에 전달합니다. 원래 pageUrl, 필요한 도메인, 다른 제작자 후보를 보존합니다. 자막 파일과 ZIP의 SMI를 지원합니다.
+- 사이트 전용 Resolver는 같은 인터페이스를 구현하여 DirectFileResolver 다음, GenericHtmlResolver 이전에 주입할 수 있습니다. Tistory / NaverBlog / GoogleDrive 전용 구현은 후속 확장 대상입니다.
+
+최종 검증: `pnpm check` 통과, **86개 단위 테스트** 및 기존 **22개 브라우저 검사**, 신규 **9개 Anissia 브라우저 검사** 통과.
+
+`tests/anissia.test.ts`와 `tests/subtitleLinks.test.ts`는 편성표 병합·TTL·부분 장애·회차 정규화·시즌/연도 구분·Provider fallback·헤더·ZIP·HTML 링크·도메인 권한·취소·SMI를 검사합니다. `scripts/browser-anissia.mjs` / `qa/anissia-report.json`은 실제 MV3 Service Worker와 팝업에서 제작자 선택·파일 적용·페이지 안내·fallback을 검사합니다.
+
+브라우저 검사는 격리된 Edge 프로필에서 HTTPS 모의 응답으로 수행했습니다. 테스트 복사본에만 blog.example / cdn.example 권한을 사전 부여해 네이티브 승인 대화상자를 피합니다. 별도의 ungranted.example은 권한 거부 상태로 유지하여 요청 전에 팝업으로 안내되는지 확인합니다. 실제 Anissia 편성표·자막 API 응답은 읽기만 확인했고 개인 블로그의 실제 파일 전체 또는 로그인·JavaScript 기반 다운로드는 보장하지 않습니다.
+
 ## 단계별 체크포인트
 
 | Phase | 구현                                                                                              | 단계 종료 확인                                                |

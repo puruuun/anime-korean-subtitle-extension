@@ -51,7 +51,7 @@ export const defaultSettings: Settings = {
     structured: 'json_schema',
   },
   providers: {
-    subdl: { enabled: true, apiKey: '', priority: 1 },
+    subdl: { enabled: true, apiKey: '', priority: 2 },
     opensubtitles: {
       enabled: true,
       apiKey: '',
@@ -59,7 +59,7 @@ export const defaultSettings: Settings = {
       username: '',
       password: '',
       baseUrl: 'https://api.opensubtitles.com/api/v1',
-      priority: 2,
+      priority: 3,
     },
   },
   display: defaultDisplay,

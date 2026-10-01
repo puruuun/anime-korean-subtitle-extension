@@ -6,6 +6,7 @@ import type {
   SubtitleProvider,
 } from '../providers/SubtitleProvider';
 import { AppError } from '../utils/errors';
+import { normalizeEpisode } from '../anime/episodeNormalizer';
 export function scoreResult(
   c: AnimeContext,
   r: SubtitleSearchResult,
@@ -18,15 +19,19 @@ export function scoreResult(
     reasons.push(reason);
   };
   const id = !!((c.imdbId && r.imdbId === c.imdbId) || (c.tmdbId && r.tmdbId === c.tmdbId));
-  const title = titleCandidates(c).some((t) => normalizeTitle(t) === normalizeTitle(r.title));
+  const title = titleCandidates(c).some(
+    (t) => normalizeTitle(t) === normalizeTitle(r.matchedTitle ?? r.title),
+  );
+  const episode = normalizeEpisode(r.episode);
+  const episodeMatches = episode !== undefined && episode === normalizeEpisode(c.episode);
   if (id) add(100, 'ID 일치');
   if (title) add(50, '제목 일치');
   if (c.season !== undefined && r.season === c.season) add(30, '시즌 일치');
-  if (r.episode === c.episode) add(50, '회차 일치');
+  if (episodeMatches) add(50, '회차 일치');
   if (c.year && r.year === c.year) add(10, '연도 일치');
   if (r.language === language) add(100, '언어 일치');
   const conflict =
-    (r.episode !== undefined && r.episode !== c.episode) ||
+    (r.episode !== undefined && !episodeMatches) ||
     (c.season !== undefined && r.season !== undefined && c.season !== r.season);
   if (conflict) {
     score -= 500;
@@ -38,11 +43,7 @@ export function scoreResult(
     score,
     reasons,
     autoEligible:
-      !conflict &&
-      r.episode === c.episode &&
-      r.language === language &&
-      (id || title) &&
-      score >= 120,
+      !conflict && episodeMatches && r.language === language && (id || title) && score >= 120,
   };
 }
 export class SubtitleSearch {
@@ -50,19 +51,30 @@ export class SubtitleSearch {
   async search(c: AnimeContext, language: SourceLanguage, signal?: AbortSignal) {
     const results: SubtitleSearchResult[] = [];
     const errors: string[] = [];
-    for (const p of this.providers) {
+    let hardFailure = false;
+    const priority: Record<string, number> = { anissia: 1, subdl: 2, opensubtitles: 3 };
+    const providers =
+      language === 'ko'
+        ? [...this.providers].sort((a, b) => (priority[a.id] ?? 4) - (priority[b.id] ?? 4))
+        : this.providers;
+    for (const p of providers) {
       signal?.throwIfAborted();
       try {
         results.push(...(await p.search(c, language)).map((r) => scoreResult(c, r, language)));
       } catch {
+        signal?.throwIfAborted();
         errors.push(p.id + ' 검색 실패');
+        if (p.id !== 'anissia') hardFailure = true;
       }
     }
-    if (!results.length && errors.length)
+    if (!results.length && hardFailure)
       throw new AppError('PROVIDER', '자막 Provider 요청에 실패했습니다: ' + errors.join(', '));
     return {
       results: [...new Map(results.map((r) => [r.id, r])).values()].sort(
-        (a, b) => (b.score ?? 0) - (a.score ?? 0),
+        (a, b) =>
+          Number(!!b.autoEligible) - Number(!!a.autoEligible) ||
+          (language === 'ko' ? (priority[a.providerId] ?? 4) - (priority[b.providerId] ?? 4) : 0) ||
+          (b.score ?? 0) - (a.score ?? 0),
       ),
       warnings: errors,
     };

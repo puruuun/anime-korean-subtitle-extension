@@ -36,7 +36,23 @@ function valid(c: SubtitleCue) {
 export function parseSubtitle(raw: string, format?: string): SubtitleCue[] {
   const text = raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   const cues: SubtitleCue[] = [];
-  if (
+  if (format === 'smi' || /<sami(?:\s|>)/i.test(text) || /<sync\s[^>]*start\s*=/i.test(text)) {
+    const clean = text.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
+    const syncs = [...clean.matchAll(/<sync\b[^>]*\bstart\s*=\s*["']?(\d+)["']?[^>]*>/gi)];
+    for (let i = 0; i < syncs.length; i++) {
+      const current = syncs[i];
+      const next = syncs[i + 1];
+      const startTime = Number(current[1]) / 1000;
+      const endTime = next ? Number(next[1]) / 1000 : startTime + 4;
+      const block = clean.slice(current.index! + current[0].length, next?.index ?? clean.length);
+      const paragraphs = [...block.matchAll(/<p\b([^>]*)>([\s\S]*?)(?=<p\b|$)/gi)];
+      const chosen =
+        paragraphs.find((p) => /\bclass\s*=\s*["']?(?:kr|ko)/i.test(p[1])) ?? paragraphs[0];
+      const body = (chosen?.[2] ?? block).replace(/<br\s*\/?\s*>/gi, '\n');
+      const cue = { id: cues.length + 1, startTime, endTime, text: plainText(body) };
+      if (valid(cue)) cues.push(cue);
+    }
+  } else if (
     format === 'ass' ||
     format === 'ssa' ||
     /^\[Script Info\]/m.test(text) ||
@@ -111,7 +127,7 @@ export function parseSubtitle(raw: string, format?: string): SubtitleCue[] {
   if (!cues.length)
     throw new AppError(
       'FORMAT',
-      '자막 포맷을 읽을 수 없습니다. SRT / VTT / ASS 파일인지 확인하세요.',
+      '자막 포맷을 읽을 수 없습니다. SMI / SRT / VTT / ASS 파일인지 확인하세요.',
     );
   if (cues.length > 30000) throw new AppError('SIZE', '자막 Cue 개수가 너무 많습니다.');
   return cues.sort((a, b) => a.startTime - b.startTime || a.id - b.id);
