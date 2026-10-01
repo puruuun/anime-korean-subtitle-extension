@@ -8,12 +8,16 @@ import {
   type SubtitleResource,
 } from './resourceLoader';
 import { AppError } from '../../utils/errors';
-import { normalizeEpisode, filenameEpisode } from '../../anime/episodeNormalizer';
+import { GoogleDriveResolver } from './GoogleDriveResolver';
+import { BlogspotResolver } from './BlogspotResolver';
+import { verifyFileEpisode } from './fileValidation';
 
 export class SubtitleLinkResolverChain {
   constructor(
     private resolvers: SubtitleLinkResolver[] = [
       new DirectFileResolver(),
+      new GoogleDriveResolver(),
+      new BlogspotResolver(),
       new GenericHtmlResolver(),
     ],
     private load: (
@@ -36,19 +40,7 @@ export class SubtitleLinkResolverChain {
         const result = await resolver.resolve(resource, context);
         signal?.throwIfAborted();
         if (result?.kind === 'file') {
-          const parsed = filenameEpisode(result.name);
-          const allowed = candidate.fileEpisodes ?? [normalizeEpisode(candidate.episode)];
-          const zip = new Uint8Array(result.buffer).slice(0, 2);
-          // ZIP contents are authoritative; a container may be named after the final episode.
-          const archive = zip[0] === 0x50 && zip[1] === 0x4b;
-          if (
-            !archive &&
-            ((candidate.requireEpisodeMatch && !parsed) ||
-              (parsed &&
-                (!allowed.includes(parsed.episode) ||
-                  parsed.special !== candidate.episodeType ||
-                  (parsed.season !== undefined && parsed.season !== (candidate.season ?? 1)))))
-          )
+          if (!verifyFileEpisode(result, candidate))
             return {
               kind: 'page',
               pageUrl,

@@ -1,10 +1,10 @@
-# Anime Korean Subtitle v0.4.1
+# Anime Korean Subtitle v0.4.2
 
 Miruro / Re:ANIME의 현재 작품과 회차를 감지하고 한국어 자막을 준비하는 Chrome Manifest V3 확장프로그램입니다. 영상·오디오는 다운로드하거나 전사하지 않습니다.
 
 ## 다른 컴퓨터에 설치
 
-1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.4.1.zip`을 받습니다.
+1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.4.2.zip`을 받습니다.
 2. ZIP을 폴더에 압축 해제합니다. 그 폴더의 `extension/manifest.json`을 확인합니다.
 3. Chrome에서 `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
 4. **압축해제된 확장 프로그램 로드**를 눌러 `extension` 폴더를 선택합니다.
@@ -56,7 +56,9 @@ Kitsunekko 미러 일본어 자막 → 한국어 점진 번역
 
 제작자별 최신 등록 회차가 현재 회차와 달라도 배포 페이지의 회차별 파일 또는 전체 ZIP을 확인합니다. 과거 회차는 파일명으로 해당 회차를 확인해야 적용합니다. 이전 TV 시즌 연결과 회차 수가 확인된 경우에만 시즌 회차와 누적 회차를 함께 허용합니다(예: 2기 12화 = 누적 24화).
 
-`website`는 배포 페이지일 수 있습니다. DirectFileResolver / GenericHtmlResolver가 SMI / SRT / ASS / SSA / VTT / ZIP 또는 정적 파일 링크를 해석합니다. 배포 도메인은 수동 후보의 **접근 허용 후 적용**으로 승인할 수 있습니다. 권한이 없거나 링크를 안전하게 해석할 수 없으면 AUTO는 다음 소스로 진행합니다. 로그인이 필요한 페이지, JavaScript로 생성되는 다운로드, 복잡한 블로그 페이지는 지원하지 않을 수 있습니다.
+`website`는 배포 페이지일 수 있습니다. SMI / SRT / ASS / SSA / VTT / ZIP, 정적 파일 링크와 공개 Google Drive 파일 링크를 해석합니다. Blogspot의 최신 글에 요청 회차가 없으면 공개 글 목록에서 같은 작품·시즌의 이전 회차 글을 찾습니다. 통합 ZIP은 내부 파일명으로 요청 회차를 선택하며, 오래된 한글 ZIP 파일명과 `Lv1 미완성.ass`, `작품명 2 01.ass` 형식도 확인합니다. 본문의 폰트 링크와 다른 작품·시즌의 검색 결과는 제외합니다.
+
+배포 도메인은 수동 후보의 **접근 허용 후 적용**으로 승인할 수 있습니다. Blogspot 이후 Google Drive를 이용하면 `drive.usercontent.google.com` 파일 도메인도 같은 버튼으로 한 번 더 승인해야 할 수 있습니다. 권한이 없거나 회차를 확정할 수 없으면 배포 페이지와 원인을 안내하며, AUTO는 다음 소스로 진행합니다. 로그인 전용 파일, Drive 폴더, 다운로드 제한, JavaScript로 생성되는 링크는 지원하지 않을 수 있습니다. Blogspot 이전 글 검색은 최대 100개 결과로 제한합니다.
 
 ### Jimaku
 
@@ -86,12 +88,15 @@ npm run check
 npx playwright install chromium
 npm run test:browser
 npm run test:browser:progressive
+npm run test:browser:anissia
+npm run test:anissia:distribution
+npm run test:browser:distribution
 node scripts/browser-frames.mjs
 node scripts/verify-services.mjs
 node scripts/verify-live-provider.mjs
 node scripts/research-live.mjs
 ```
 
-`dist/`는 Chrome에 로드할 결과물입니다. `npm run check`는 typecheck, unit tests, build를 실행합니다. 브라우저 검사는 격리된 실제 MV3 확장과 모의 서비스/번역 응답을 사용합니다. 실제 서비스 확인은 `qa/services-report.json`, 실제 페이지에서 실행한 두 Adapter 결과는 `qa/live-site-research.json`에 기록합니다. 상세 검증 범위와 제한은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
+`dist/`는 Chrome에 로드할 결과물입니다. `npm run check`는 typecheck, unit tests, build를 실행합니다. 브라우저 회귀 검사는 격리된 실제 MV3 확장과 모의 서비스/번역 응답을 사용합니다. Anissia 배포 형태 검사는 실제 Blogspot·Drive·티스토리 파일을 사용하며 `qa/anissia-distribution-report.json` 및 `qa/anissia-distribution-browser-report.json`에 기록합니다. 다른 실제 서비스 확인은 `qa/services-report.json`, 실제 페이지에서 실행한 두 Adapter 결과는 `qa/live-site-research.json`에 기록합니다. 상세 검증 범위와 제한은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
 
 자막 렌더러, 회차별 싱크, fullscreen, seek와 progressive buffer UI는 유지됩니다. ASS는 시간·대사 중심으로 처리하며 고급 스타일을 보존하지 않습니다. HLS는 WebVTT subtitle segment만 읽습니다.

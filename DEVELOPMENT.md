@@ -1,6 +1,6 @@
-# v0.4.1 구현 및 검증
+# v0.4.2 구현 및 검증
 
-검증일: 2026-10-01 (Asia/Seoul). 기반 소스: `ed72faa47421d20a354291b2919b79352275783d`.
+검증일: 2026-10-02 (Asia/Seoul). 최초 기반 소스: `ed72faa47421d20a354291b2919b79352275783d`. 이번 수정은 v0.4.1 (`705efda4618b1096999cce898a4b281a03ae362a`)에서 이어집니다.
 
 ## 구현
 
@@ -19,15 +19,17 @@ AUTO 순서는 Anissia → Jimaku → Kitsunekko → embedded English입니다. 
 ## 검증 결과
 
 - `npm run typecheck` / `npm run build`: 성공.
-- `npm test`: 133개 테스트 성공.
+- `npm test`: 160개 테스트 성공.
 - `npm run test:browser`: 실제 MV3 Service Worker / 팝업 / content script를 사용하는 17개 검사 성공.
 - `npm run test:browser:progressive`: 기존 점진 번역 회귀 검사 9개 성공.
 - `node scripts/browser-frames.mjs`: Re:ANIME iframe / fullscreen / stale epoch / credential isolation 검사 5개 성공.
 - `npm run test:browser:anissia`: 실제 API·배포 페이지·ZIP을 사용하는 MV3 한국어 적용 검사 3개 성공. 권한 누락 안내, 425 Cue 전달, 첫 한국어 자막 표시를 확인했습니다.
+- `npm run test:browser:distribution`: 실제 Blogspot·Drive 통합본/이전 회차 적용과 해당 도메인 권한 안내를 사용하는 MV3 검사 4개 성공.
+- `npm run test:anissia:distribution`: 네 제작자 배포 경로의 실제 다운로드·회차 선택·파싱 46/46 성공.
 - Jimaku build key 분리: 테스트 값을 넣고 worker에만 포함되는지 검사한 뒤 키 없이 다시 빌드했습니다. `qa/build-security-report.json`.
 - 프로덕션 의존성 `npm audit --omit=dev`: 알려진 취약점 0개.
 
-브라우저 자동 검사는 Chromium의 격리된 임시 프로필에서 수행하며 자막 서비스와 LLM 응답은 모의 응답입니다. 테스트용 blog.example / cdn.example / player.example 권한을 임시 manifest에만 사전 부여했습니다. 배포 manifest에는 테스트 도메인이 없습니다.
+브라우저 자동 검사는 Chromium의 격리된 임시 프로필에서 수행합니다. 검색·번역·프레임 회귀 검사 31개는 자막 서비스와 LLM의 모의 응답을 사용합니다. Anissia 실서비스 검사 7개는 실제 API·배포 페이지·파일을 사용하고 영상 요소/작품 감지 정보만 통제합니다. 필요한 호스트는 임시 테스트 manifest에만 사전 부여했습니다. 배포 manifest는 원본과 동일하며 테스트 도메인이나 Blogspot/Drive/티스토리/CDN 사전 권한을 추가하지 않았습니다.
 
 단위 검사는 Anissia 우선·번역 미호출, 페이지 resolve 실패 후 Japanese fallback, 다음 candidate, Jimaku 키 없음 및 401/403/429/500, 미러 회차 불일치, 내장 영어 최후 fallback, 수동 경로 분리, 단계 ON/OFF, 검색/다운로드 취소, source 전체 timeout, migration, source/hash/엔진/model/언어 cache 분리, 번역 응답 ID 검증을 포함합니다.
 
@@ -54,7 +56,8 @@ AUTO 순서는 Anissia → Jimaku → Kitsunekko → embedded English입니다. 
 
 ## 알려진 제한
 
-- 전체 작품 검색은 쿼리당 최대 4페이지로 제한합니다. 제작자 최신 페이지에 과거 파일이 없거나 외부 서비스의 동적 다운로드만 있는 경우 수동 후보로 배포 페이지를 안내합니다.
+- 전체 작품 검색은 쿼리당 최대 4페이지로 제한합니다. Blogspot 이전 글 검색은 작품별 공개 검색 결과 최대 100개, 일치 글 최대 4개를 확인합니다. 그 범위에 과거 파일이 없거나 외부 서비스의 동적 다운로드만 있는 경우 수동 후보로 배포 페이지를 안내합니다.
+- Drive는 공개 개별 파일 링크와 같은 파일 ID의 기본 다운로드 확인 폼만 처리합니다. 로그인/비공개 파일·폴더·삭제·다운로드 제한·8 MiB를 넘는 응답은 자동으로 적용하지 않습니다. 어떤 제작자가 공개한 모든 형식이 작동한다고 보장하지 않습니다.
 - 개인 배포 페이지의 접근 권한이 없거나 로그인/JavaScript 다운로드가 필요하면 AUTO는 일본어/영어로 진행합니다. 필요한 도메인은 수동 Korean에서 승인할 수 있습니다.
 - 미러 제목이나 파일명에서 회차·시즌을 확정할 수 없으면 적용하지 않습니다. 사이트 context가 일반 숫자 회차일 때 OVA/SP/Special을 추측해서 연결하지 않습니다.
 - 원본 다운로드 캐시는 24시간입니다. 사이트가 같은 URL의 파일을 바꾸면 TTL 만료나 캐시 삭제 후 새 내용이 반영됩니다.
@@ -70,3 +73,13 @@ AniList GraphQL에 미사용 변수를 선언해 실제 HTTP 400이 발생하던
 사용자 페이지의 실제 Miruro Adapter는 영어 제목/2기/12화만 감지했습니다. 수정 후 AniList 210031 → Anissia 3495 → sumomomo.tistory.com/492 → blog.kakaocdn.net ZIP → Seihantai - 24.srt를 실제 요청으로 읽어 425개 한국어 Cue를 파싱했습니다. qa/anissia-live-report.json 및 qa/anissia-browser-live-report.json 참조. 브라우저 검사는 같은 감지 정보를 가진 테스트 영상 요소로 수행하며 실제 외부 영상의 재생/싱크는 별도입니다.
 
 편성표에 없는 작품은 홈페이지 전체 목록 검색을 이용합니다. 최신 caption과 다른 회차는 배포 페이지와 ZIP에서 파일 회차를 확인해야 적용합니다. 수동 모드에서 연결/timeout/파일 파싱 오류를 NOT_FOUND로 바꾸지 않고 원인과 배포 페이지를 제공합니다.
+
+## v0.4.2 배포 형태별 수정
+
+v0.4.1은 Blogspot → Google Drive 보기 링크와 최신 글 → 이전 회차 글 검색을 처리하지 못했습니다. `GoogleDriveResolver`는 공개 공유 파일을 `drive.usercontent.google.com`에서 내려받으며 resourcekey를 보존하고, 쿠키 없이 같은 파일 ID의 기본 다운로드 확인 폼만 처리합니다. `BlogspotResolver`는 현재 글의 파일부터 검증하고 필요한 경우 공개 Blogger feed에서 동일 블로그·동일 작품·동일 시즌의 회차 글을 찾습니다. 피드 본문에 나온 파일을 다운로드한 뒤 다시 파일 회차를 확인합니다.
+
+HTML 처리는 Service Worker에서 DOM 없이 수행합니다. Blogspot 본문 범위로 링크를 제한하고 폰트 링크를 제외합니다. ZIP 이름은 UTF-8 플래그, CRC가 일치하는 Unicode Path extra field, 한국어 CP949 또는 일본어 Shift-JIS 순서로 처리합니다. `Title 2 01.ass`는 확인된 2기 context가 있을 때만 시즌 2 / 회차 1로 해석합니다. 구분 없는 다중 숫자·다른 회차·다른 시즌은 계속 거절합니다.
+
+`npm run test:anissia:distribution`으로 실제 Anissia API → Blogspot/티스토리 → Drive/CDN → ZIP/ASS → 한국어 Cue 파이프라인을 검사했습니다. Anissia 2798 카이란 1~12화와 C소라 1~12화, Anissia 3041 카이란 1~13화와 Sydeny 1~9화 총 46/46이 통과했습니다. Google Drive 통합 ZIP, 폰트와 자막 Drive 링크가 함께 있는 글, 최신 13화에서 이전 1화 글 검색, 한글 파일명·시즌 숫자·미완성 표기, 티스토리의 개별 ZIP·통합 ZIP·폰트 ZIP 혼합 배포가 포함됩니다. 요청 회차의 개별 ZIP이 없으면 하나로 확정된 통합 ZIP의 내부 파일명을 검증하며, 폰트는 다운로드하지 않았습니다. 단위 테스트는 공개 다운로드 확인, 정확한 도메인 권한, 무관한 글·다른 시즌·다른 블로그 배제, 취소와 없는 회차의 오적용 방지를 포함합니다.
+
+실제 다운로드 검사 증거는 `qa/anissia-distribution-report.json`, 빌드된 MV3 검사 증거는 `qa/anissia-distribution-browser-report.json`입니다. 자막 원문 파일은 저장소와 Release에 포함하지 않습니다. 실제 외부 영상의 재생 및 전체 싱크는 별도 검증 범위입니다.

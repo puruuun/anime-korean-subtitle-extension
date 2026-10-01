@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-10-01T18:17:12.530Z",
+  "passed": 4,
+  "tests": [
+    "Built MV3 identifies missing https://kairan03.blogspot.com/* permission and retains the Korean candidate",
+    "Built MV3 identifies missing https://drive.usercontent.google.com/* permission and retains the Korean candidate",
+    "Anissia 2798 episode one: real distribution/download/parse and first cue rendered (468 cues)",
+    "Anissia 3041 episode one: real distribution/download/parse and first cue rendered (1667 cues)"
+  ],
+  "requests": [
+    "https://kairan03.blogspot.com/2026/06/2-12.html",
+    "https://kairan03.blogspot.com/2026/06/2-12.html",
+    "https://drive.usercontent.google.com/download?id=1PlN67A9AdlJ5gZaIWa6ybqAVDG6Bs2Gi&export=download",
+    "https://kairan03.blogspot.com/2025/10/13.html",
+    "https://drive.usercontent.google.com/download?id=1P7zg3iNYIObJ26fxDLzIYcuUwmYTwBt7&export=download",
+    "https://kairan03.blogspot.com/feeds/posts/default?alt=json&max-results=50&q=%EC%82%AC%EC%9D%BC%EB%9F%B0%ED%8A%B8+%EC%9C%84%EC%B9%98&start-index=1",
+    "https://drive.usercontent.google.com/download?id=1Dm5IbVlS3p-sKNsChNN9cr2v27N7zZuG&export=download"
+  ],
+  "scope": "Built MV3 extension, real Anissia/Blogspot/feed/Drive requests; controlled video and explicit anime context; host permissions granted in temporary test manifests only; actual external playback/sync not tested"
+}

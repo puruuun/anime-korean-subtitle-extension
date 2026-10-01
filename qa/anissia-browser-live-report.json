@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-01T13:09:07.264Z",
+  "checkedAt": "2026-10-01T18:17:01.926Z",
   "passed": 3,
   "tests": [
     "Real API search shows the exact missing Tistory permission instead of NOT_FOUND",

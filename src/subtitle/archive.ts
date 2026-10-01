@@ -1,6 +1,7 @@
 import { unzipSync } from 'fflate';
 import { filenameEpisode, normalizeEpisode } from '../anime/episodeNormalizer';
 import { AppError } from '../utils/errors';
+import { zipNames } from './zipNames';
 export function extractSubtitle(
   buffer: ArrayBuffer,
   episode: number,
@@ -8,6 +9,7 @@ export function extractSubtitle(
   season = 1,
   alternateEpisodes: string[] = [],
   requireEpisodeMatch = false,
+  language: 'ko' | 'ja' = 'ko',
 ): { bytes: Uint8Array; name: string } {
   const bytes = new Uint8Array(buffer);
   if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) return { bytes, name: 'subtitle' };
@@ -21,9 +23,11 @@ export function extractSubtitle(
       return true;
     },
   });
-  const names = Object.keys(files);
+  const decoded = zipNames(bytes, language);
+  const entries = Object.keys(files).map((key) => ({ key, name: decoded.get(key) ?? key }));
+  const names = entries.map((entry) => entry.name);
   const matching = names.filter((n) => {
-    const parsed = filenameEpisode(n.split('/').at(-1)!);
+    const parsed = filenameEpisode(n.split('/').at(-1)!, season);
     return (
       !!parsed &&
       [normalizeEpisode(episode), ...alternateEpisodes].includes(parsed.episode) &&
@@ -42,7 +46,7 @@ export function extractSubtitle(
       'ARCHIVE',
       '압축 파일의 회차를 확정할 수 없습니다. 회차별 자막 후보를 선택하세요.',
     );
-  const parsed = filenameEpisode(chosen.split('/').at(-1)!);
+  const parsed = filenameEpisode(chosen.split('/').at(-1)!, season);
   if (
     parsed &&
     (![normalizeEpisode(episode), ...alternateEpisodes].includes(parsed.episode) ||
@@ -50,5 +54,5 @@ export function extractSubtitle(
       (parsed.season !== undefined && parsed.season !== season))
   )
     throw new AppError('EPISODE', '압축 파일 안 자막의 회차가 다릅니다.');
-  return { bytes: files[chosen], name: chosen };
+  return { bytes: files[entries.find((entry) => entry.name === chosen)!.key], name: chosen };
 }

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Anime Korean Subtitle",
   "description": "Miruro / Re:ANIME 외부 자막 검색 및 텍스트 기반 한국어 번역",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",

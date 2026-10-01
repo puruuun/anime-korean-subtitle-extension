@@ -17,13 +17,25 @@ function dispositionName(value: string) {
       /* plain filename below */
     }
   }
-  return (
+  const name =
     value
       .match(/filename\s*=\s*(?:"([^"]+)"|([^;]+))/i)
       ?.slice(1)
       .find(Boolean)
-      ?.trim() ?? ''
-  );
+      ?.trim() ?? '';
+  if (
+    [...name].some((c) => c.charCodeAt(0) > 127) &&
+    [...name].every((c) => c.charCodeAt(0) <= 255)
+  ) {
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(
+        Uint8Array.from([...name], (c) => c.charCodeAt(0)),
+      );
+    } catch {
+      /* retain non-UTF8 header name */
+    }
+  }
+  return name;
 }
 export class DirectFileResolver implements SubtitleLinkResolver {
   id = 'direct-file';

@@ -18,6 +18,7 @@ export function episodeFromSubtitleName(value: string): string | undefined {
 
 export function filenameEpisode(
   value: string,
+  seasonHint?: number,
 ): { episode: string; season?: number; special?: string } | undefined {
   const name = value.normalize('NFKC').replace(/\.(smi|srt|ass|ssa|vtt|zip)$/i, '');
   if (/\d\s*[-~]\s*\d/.test(name) || /\b(?:batch|complete)\b/i.test(name)) return undefined;
@@ -28,7 +29,9 @@ export function filenameEpisode(
   if (se) return { season: Number(se[1]), episode: normalizeEpisode(se[2])! };
   const explicit =
     name.match(/\b(?:episode|ep|e)[\s._-]*(\d+(?:\.\d+)?)(?=$|[\s._\]\-])/i) ??
-    name.match(/第\s*(\d+(?:\.\d+)?)\s*話/);
+    name.match(/第\s*(\d+(?:\.\d+)?)\s*話/) ??
+    name.match(/(?:^|[\s._-])(\d+(?:\.\d+)?)\s*(?:화|회|話)(?=$|[\s._\]\-(])/i) ??
+    name.match(/\bLv[\s._-]*(\d+(?:\.\d+)?)(?:\s+(?:미완성|완성|END|完|끝))?$/i);
   if (explicit) return { episode: normalizeEpisode(explicit[1])! };
   // A release separator has more confidence than a number embedded in the title.
   const release = [...name.matchAll(/\s-\s*(\d+(?:\.\d+)?)(?=$|[\s_\]\-])/g)];
@@ -39,5 +42,9 @@ export function filenameEpisode(
   const numbers = [...clean.matchAll(/(?:^|[\s._-])(\d+(?:\.\d+)?)(?=$|[\s._-])/g)]
     .map((m) => normalizeEpisode(m[1])!)
     .filter((n) => Number(n) < 1900); // years, resolution and CRC must not become episodes
-  return numbers.length === 1 ? { episode: numbers[0] } : undefined;
+  if (numbers.length === 1) return { episode: numbers[0] };
+  // Anissia's verified second-season archives sometimes name files "Title 2 01.ass".
+  if (numbers.length === 2 && seasonHint && seasonHint > 1 && numbers[0] === String(seasonHint))
+    return { season: seasonHint, episode: numbers[1] };
+  return undefined;
 }

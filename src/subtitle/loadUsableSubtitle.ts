@@ -24,6 +24,7 @@ export async function loadUsableSubtitle(
     candidate.updatedAt,
     candidate.fileEpisodes,
     candidate.requireEpisodeMatch,
+    candidate.language,
     candidate.season,
     candidate.episodeType,
   ]);
@@ -39,6 +40,7 @@ export async function loadUsableSubtitle(
     c.season ?? titleSignature(c.title).season ?? 1,
     candidate.fileEpisodes,
     candidate.requireEpisodeMatch,
+    candidate.language,
   );
   const cues = parseSubtitle(
     decodeSubtitle(bytes, candidate.language),
