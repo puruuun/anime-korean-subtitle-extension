@@ -2,9 +2,14 @@
   "manifest_version": 3,
   "name": "Anime Korean Subtitle",
   "description": "Miruro / Re:ANIME 외부 자막 검색 및 텍스트 기반 한국어 번역",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "minimum_chrome_version": "120",
-  "permissions": ["storage", "scripting", "activeTab", "webNavigation"],
+  "permissions": [
+    "storage",
+    "scripting",
+    "activeTab",
+    "webNavigation"
+  ],
   "host_permissions": [
     "https://*.miruro.to/*",
     "https://reanime.to/*",
@@ -17,7 +22,10 @@
     "https://raw.githubusercontent.com/Ajatt-Tools/kitsunekko-mirror/*",
     "https://generativelanguage.googleapis.com/*"
   ],
-  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
   "background": {
     "service_worker": "serviceWorker.js",
     "type": "module"
@@ -32,15 +40,25 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://*.miruro.to/*", "https://reanime.to/*"],
-      "js": ["pageBridge.js"],
+      "matches": [
+        "https://*.miruro.to/*",
+        "https://reanime.to/*"
+      ],
+      "js": [
+        "pageBridge.js"
+      ],
       "run_at": "document_start",
       "all_frames": true,
       "world": "MAIN"
     },
     {
-      "matches": ["https://*.miruro.to/*", "https://reanime.to/*"],
-      "js": ["contentScript.js"],
+      "matches": [
+        "https://*.miruro.to/*",
+        "https://reanime.to/*"
+      ],
+      "js": [
+        "contentScript.js"
+      ],
       "run_at": "document_start",
       "all_frames": true,
       "match_about_blank": true

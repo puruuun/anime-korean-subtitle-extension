@@ -22,6 +22,10 @@ export async function loadUsableSubtitle(
     candidate.id,
     candidate.downloadUrl ?? candidate.pageUrl,
     candidate.updatedAt,
+    candidate.fileEpisodes,
+    candidate.requireEpisodeMatch,
+    candidate.season,
+    candidate.episodeType,
   ]);
   let buffer = await cache.get(key);
   signal.throwIfAborted();
@@ -33,6 +37,8 @@ export async function loadUsableSubtitle(
     c.episode,
     c.episodeType,
     c.season ?? titleSignature(c.title).season ?? 1,
+    candidate.fileEpisodes,
+    candidate.requireEpisodeMatch,
   );
   const cues = parseSubtitle(
     decodeSubtitle(bytes, candidate.language),

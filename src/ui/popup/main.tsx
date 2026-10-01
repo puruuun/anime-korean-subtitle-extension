@@ -192,6 +192,8 @@ function Popup() {
                   nativeTitle: undefined,
                   koreanTitle: undefined,
                   synonyms: undefined,
+                  episodeOffset: undefined,
+                  year: undefined,
                 }
               : {}),
           }
@@ -366,6 +368,11 @@ function Popup() {
             <small>{r.reasons?.join(' · ')}</small>
             {r.updatedAt && (
               <small className="candidate-updated">업데이트 {r.updatedAt.replace('T', ' ')}</small>
+            )}
+            {r.listedEpisode && r.listedEpisode !== String(r.episode) && (
+              <small>
+                제작자 최신 등록 회차 · {r.listedEpisode} (파일 회차를 별도로 확인합니다)
+              </small>
             )}
             {r.linkMessage && <p>{r.linkMessage}</p>}
             <div className="candidate-actions">

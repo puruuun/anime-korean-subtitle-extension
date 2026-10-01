@@ -37,11 +37,17 @@ export class SubtitleLinkResolverChain {
         signal?.throwIfAborted();
         if (result?.kind === 'file') {
           const parsed = filenameEpisode(result.name);
+          const allowed = candidate.fileEpisodes ?? [normalizeEpisode(candidate.episode)];
+          const zip = new Uint8Array(result.buffer).slice(0, 2);
+          // ZIP contents are authoritative; a container may be named after the final episode.
+          const archive = zip[0] === 0x50 && zip[1] === 0x4b;
           if (
-            parsed &&
-            (parsed.episode !== normalizeEpisode(candidate.episode) ||
-              parsed.special !== candidate.episodeType ||
-              (parsed.season !== undefined && parsed.season !== (candidate.season ?? 1)))
+            !archive &&
+            ((candidate.requireEpisodeMatch && !parsed) ||
+              (parsed &&
+                (!allowed.includes(parsed.episode) ||
+                  parsed.special !== candidate.episodeType ||
+                  (parsed.season !== undefined && parsed.season !== (candidate.season ?? 1)))))
           )
             return {
               kind: 'page',

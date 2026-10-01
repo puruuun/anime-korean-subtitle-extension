@@ -6,6 +6,8 @@ export function extractSubtitle(
   episode: number,
   episodeType?: string,
   season = 1,
+  alternateEpisodes: string[] = [],
+  requireEpisodeMatch = false,
 ): { bytes: Uint8Array; name: string } {
   const bytes = new Uint8Array(buffer);
   if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) return { bytes, name: 'subtitle' };
@@ -24,12 +26,17 @@ export function extractSubtitle(
     const parsed = filenameEpisode(n.split('/').at(-1)!);
     return (
       !!parsed &&
-      parsed.episode === normalizeEpisode(episode) &&
+      [normalizeEpisode(episode), ...alternateEpisodes].includes(parsed.episode) &&
       parsed.special === episodeType &&
       (parsed.season === undefined || parsed.season === season)
     );
   });
-  const chosen = matching.length === 1 ? matching[0] : names.length === 1 ? names[0] : undefined;
+  const chosen =
+    matching.length === 1
+      ? matching[0]
+      : names.length === 1 && !requireEpisodeMatch
+        ? names[0]
+        : undefined;
   if (!chosen)
     throw new AppError(
       'ARCHIVE',
@@ -38,7 +45,7 @@ export function extractSubtitle(
   const parsed = filenameEpisode(chosen.split('/').at(-1)!);
   if (
     parsed &&
-    (parsed.episode !== normalizeEpisode(episode) ||
+    (![normalizeEpisode(episode), ...alternateEpisodes].includes(parsed.episode) ||
       parsed.special !== episodeType ||
       (parsed.season !== undefined && parsed.season !== season))
   )

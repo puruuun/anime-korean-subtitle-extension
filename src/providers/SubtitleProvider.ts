@@ -7,6 +7,9 @@ export interface SubtitleSearchResult {
   release: string;
   language: SourceLanguage;
   episode?: number | string;
+  listedEpisode?: string;
+  fileEpisodes?: string[];
+  requireEpisodeMatch?: boolean;
   season?: number;
   year?: number;
   anilistId?: number;

@@ -107,7 +107,12 @@ describe('automatic Anissia provider', () => {
     vi.stubGlobal('fetch', fetchMock);
     const provider = () => new AnissiaProvider(undefined, undefined, cache, () => now);
     const results = await provider().search(context, 'ko');
-    expect(results).toHaveLength(2);
+    expect(results).toHaveLength(3);
+    expect(results[2]).toMatchObject({
+      listedEpisode: '12',
+      episode: '12.5',
+      requireEpisodeMatch: true,
+    });
     expect(results[0]).toMatchObject({
       provider: 'anissia',
       episode: '012.50',

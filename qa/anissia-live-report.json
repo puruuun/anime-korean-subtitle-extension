@@ -1,0 +1,35 @@
+{
+  "checkedAt": "2026-10-01T13:04:58.569Z",
+  "context": {
+    "site": "miruro",
+    "title": "You and I Are Polar Opposites Season 2",
+    "season": 2,
+    "episode": 12,
+    "pageUrl": "https://www.miruro.to/watch/qFe2jyMO-z1LwHyLlLpGyRUbWSg0g55W/seihantai-na-kimi-to-boku-2nd-season?ep=12",
+    "anilistId": 210031,
+    "malId": 63832,
+    "year": 2026,
+    "titles": {
+      "english": "You and I Are Polar Opposites Season 2",
+      "romaji": "Seihantai na Kimi to Boku 2nd Season",
+      "japanese": "正反対な君と僕 第2期",
+      "synonyms": [
+        "ลุ้นรักฉบับคู่ต่างขั้ว ซีซัน 2"
+      ]
+    },
+    "episodeOffset": 12
+  },
+  "animeNo": 3495,
+  "source": "anissia",
+  "language": "ko",
+  "cueCount": 425,
+  "firstCueTime": 4.03,
+  "lastCueTime": 1428.99,
+  "elapsedMs": 319,
+  "distributionOrigins": [
+    "https://sumomomo.tistory.com/*",
+    "https://blog.kakaocdn.net/*"
+  ],
+  "translationExecuted": false,
+  "verificationScope": "Real AniList/Anissia/Tistory/CDN requests with the same source pipeline; optional permissions simulated; actual video playback not tested"
+}

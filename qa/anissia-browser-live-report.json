@@ -1,0 +1,10 @@
+{
+  "checkedAt": "2026-10-01T13:09:07.264Z",
+  "passed": 3,
+  "tests": [
+    "Real API search shows the exact missing Tistory permission instead of NOT_FOUND",
+    "Real AniList + Anissia + Tistory + CDN requests finish with 425 Korean cues in the built MV3 extension",
+    "Season 2 episode 12 accepts verified cumulative episode 24 and renders its first Korean cue"
+  ],
+  "scope": "Built MV3 with a controlled video page matching the actual Miruro adapter context; real public API/page/ZIP requests; optional hosts granted only in temporary test manifest; actual external video playback not tested"
+}

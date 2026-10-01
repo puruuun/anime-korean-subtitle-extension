@@ -15,6 +15,8 @@ export interface AnimeContext {
     synonyms?: string[];
   };
   episode: number;
+  /** Verified episode count of preceding TV seasons, for cumulative release filenames. */
+  episodeOffset?: number;
   season?: number;
   year?: number;
   anilistId?: number;

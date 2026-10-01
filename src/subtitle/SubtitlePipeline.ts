@@ -12,6 +12,7 @@ import { loadEmbeddedSource } from './EmbeddedSubtitleLoader';
 import { withDeadline } from '../utils/deadline';
 import { AppError } from '../utils/errors';
 import { log } from '../utils/logger';
+import { normalizeEpisode } from '../anime/episodeNormalizer';
 export type Mode = Settings['mode'];
 export interface PipelineResult {
   cues: SubtitleCue[];
@@ -37,7 +38,7 @@ export class SubtitlePipeline {
     let candidates: SubtitleSearchResult[] = [];
     let resolved = false;
     try {
-      return await withDeadline(this.signal, 10000, async (signal) => {
+      return await withDeadline(this.signal, manual ? 30000 : 10000, async (signal) => {
         candidates = selected
           ? [selected]
           : (await provider.search(c, 'ko', signal))
@@ -51,6 +52,8 @@ export class SubtitlePipeline {
         for (const candidate of candidates.filter((r) => selected || r.autoEligible).slice(0, 8)) {
           signal.throwIfAborted();
           try {
+            if (normalizeEpisode(candidate.episode) !== normalizeEpisode(c.episode))
+              throw new AppError('EPISODE', '선택한 자막 후보의 회차가 현재 영상과 다릅니다.');
             const usable = await loadUsableSubtitle(provider, candidate, c, signal);
             resolved = true;
             this.status({
@@ -67,6 +70,11 @@ export class SubtitlePipeline {
                 requiredOrigins: error.resolution.requiredOrigins,
                 linkMessage: error.message,
               });
+            else
+              candidate.linkMessage =
+                error instanceof AppError
+                  ? error.message
+                  : '자막 파일을 처리하지 못했습니다. 배포 페이지를 확인하세요.';
             log('Anissia', {
               usable: false,
               reason: error instanceof Error ? error.message : 'unknown',
@@ -78,16 +86,19 @@ export class SubtitlePipeline {
     } catch (error) {
       this.signal.throwIfAborted();
       log('Anissia', { unavailable: error instanceof Error ? error.message : 'unknown' });
+      if (manual && !candidates.length) throw error;
+      for (const candidate of candidates)
+        candidate.linkMessage ??=
+          error instanceof AppError ? error.message : '자막 파일을 처리하지 못했습니다.';
       return undefined;
     } finally {
       this.signal.throwIfAborted();
-      if (
-        !resolved &&
-        manual &&
-        candidates.length &&
-        candidates.every((r) => !r.autoEligible || r.linkMessage)
-      )
-        throw new SelectionRequired(candidates, 'ko');
+      if (!resolved && manual && candidates.length)
+        throw new SelectionRequired(
+          candidates,
+          'ko',
+          '한국어 자막 후보를 찾았지만 파일을 적용하지 못했습니다. 아래 원인을 확인하세요.',
+        );
     }
   }
   private async japanese(c: AnimeContext): Promise<PipelineResult | undefined> {

@@ -1,5 +1,5 @@
 import type { AnimeContext } from '../../anime/AnimeContext';
-import { matchedTitle } from '../../anime/titleNormalizer';
+import { matchedTitle, titleSignature } from '../../anime/titleNormalizer';
 export interface AnissiaAnime {
   animeNo: number;
   subject: string;
@@ -17,5 +17,11 @@ export function matchAnissiaTitle(c: AnimeContext, anime: AnissiaAnime): string 
     ((startYear !== undefined && c.year < startYear) || (endYear !== undefined && c.year > endYear))
   )
     return undefined;
-  return matchedTitle(c, [anime.subject, anime.originalSubject]);
+  // Some records put the season only in the Korean title, leaving the original title unsuffixed.
+  const season = titleSignature(anime.subject).season;
+  const original =
+    anime.originalSubject && season && !titleSignature(anime.originalSubject).season
+      ? anime.originalSubject + ' Season ' + season
+      : anime.originalSubject;
+  return matchedTitle(c, [anime.subject, original]);
 }

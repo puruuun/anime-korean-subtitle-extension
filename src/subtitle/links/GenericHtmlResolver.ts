@@ -52,7 +52,8 @@ export class GenericHtmlResolver implements SubtitleLinkResolver {
     }
     const links = htmlSubtitleLinks(html, resource.url);
     const episode = normalizeEpisode(context.candidate.episode);
-    const matching = links.filter((url) => episode !== undefined && linkEpisode(url) === episode);
+    const allowed = context.candidate.fileEpisodes ?? [episode];
+    const matching = links.filter((url) => allowed.includes(linkEpisode(url)));
     const chosen = matching.length === 1 ? matching[0] : links.length === 1 ? links[0] : undefined;
     const pageUrl = context.candidate.pageUrl ?? resource.url;
     if (!chosen)
@@ -64,7 +65,11 @@ export class GenericHtmlResolver implements SubtitleLinkResolver {
           : '직접 자막 파일을 찾지 못했습니다. 배포 페이지에서 확인하세요.',
       };
     const knownEpisode = linkEpisode(chosen);
-    if (knownEpisode !== undefined && episode !== knownEpisode)
+    if (
+      knownEpisode !== undefined &&
+      !allowed.includes(knownEpisode) &&
+      !/\.zip$/i.test(fileName(chosen))
+    )
       return {
         kind: 'page',
         pageUrl,

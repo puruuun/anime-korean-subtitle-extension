@@ -1,10 +1,10 @@
-# Anime Korean Subtitle v0.4.0
+# Anime Korean Subtitle v0.4.1
 
 Miruro / Re:ANIME의 현재 작품과 회차를 감지하고 한국어 자막을 준비하는 Chrome Manifest V3 확장프로그램입니다. 영상·오디오는 다운로드하거나 전사하지 않습니다.
 
 ## 다른 컴퓨터에 설치
 
-1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.4.0.zip`을 받습니다.
+1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.4.1.zip`을 받습니다.
 2. ZIP을 폴더에 압축 해제합니다. 그 폴더의 `extension/manifest.json`을 확인합니다.
 3. Chrome에서 `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
 4. **압축해제된 확장 프로그램 로드**를 눌러 `extension` 폴더를 선택합니다.
@@ -52,7 +52,9 @@ Kitsunekko 미러 일본어 자막 → 한국어 점진 번역
 
 ### Anissia
 
-별도 API Key가 없습니다. 실제 공개 API의 `{code:"ok",data:[...]}`와 bare array를 처리합니다. 0~8 편성표를 병합하고 전체 정상 응답을 5분 캐싱합니다. 원제, 영어, 로마자, 한국어, 별칭과 시즌/Part/Cour/연도 정보를 확인하고 회차 caption을 찾습니다.
+별도 API Key가 없습니다. 실제 공개 API의 `{code:"ok",data:[...]}`와 bare array를 처리합니다. 0~8 편성표를 병합하고, 작품이 없으면 홈페이지의 전체 작품 검색 API(원제 토큰 및 페이지 처리)를 조회합니다. 정상 결과는 5분 캐싱합니다. 원제, 영어, 로마자, 한국어, 별칭과 시즌/Part/Cour/연도 정보를 확인하고 회차 caption을 찾습니다.
+
+제작자별 최신 등록 회차가 현재 회차와 달라도 배포 페이지의 회차별 파일 또는 전체 ZIP을 확인합니다. 과거 회차는 파일명으로 해당 회차를 확인해야 적용합니다. 이전 TV 시즌 연결과 회차 수가 확인된 경우에만 시즌 회차와 누적 회차를 함께 허용합니다(예: 2기 12화 = 누적 24화).
 
 `website`는 배포 페이지일 수 있습니다. DirectFileResolver / GenericHtmlResolver가 SMI / SRT / ASS / SSA / VTT / ZIP 또는 정적 파일 링크를 해석합니다. 배포 도메인은 수동 후보의 **접근 허용 후 적용**으로 승인할 수 있습니다. 권한이 없거나 링크를 안전하게 해석할 수 없으면 AUTO는 다음 소스로 진행합니다. 로그인이 필요한 페이지, JavaScript로 생성되는 다운로드, 복잡한 블로그 페이지는 지원하지 않을 수 있습니다.
 
@@ -72,7 +74,7 @@ SRT / ASS / SSA / VTT를 지원합니다. `01`, `E01`, `EP01`, `Episode 01`, `S0
 
 API 요청은 service worker에서 수행합니다. local/session storage는 `TRUSTED_CONTEXTS`로 제한하며 페이지·Content Script에 API Key나 전체 설정을 전달하지 않습니다. MAIN bridge는 기존 공개 자막 응답을 읽기만 합니다. 자막 다운로드는 쿠키 없이 수행하고 크기를 제한합니다.
 
-필수 권한은 지원 사이트, Anissia, Jimaku, 미러 카탈로그/파일, Gemini, localhost로 제한합니다. 선택적 HTTP/HTTPS 권한은 사용자가 선택한 플레이어·자막·로컬 서버 도메인을 승인할 때만 사용합니다. 한국어 단계 전체 10초, 각 일본어 Provider 전체 8초, 내장 영어 단계 전체 10초를 넘기면 다음 경로로 진행합니다. 번역 timeout은 별도 설정입니다.
+필수 권한은 지원 사이트, Anissia, Jimaku, 미러 카탈로그/파일, Gemini, localhost로 제한합니다. 선택적 HTTP/HTTPS 권한은 사용자가 선택한 플레이어·자막·로컬 서버 도메인을 승인할 때만 사용합니다. 자동 한국어 단계 전체 10초(수동 한국어는 30초), 각 일본어 Provider 전체 8초, 내장 영어 단계 전체 10초를 넘기면 다음 경로로 진행합니다. 번역 timeout은 별도 설정입니다.
 
 ## 개발 및 검증
 

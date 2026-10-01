@@ -1,4 +1,4 @@
-# v0.4.0 구현 및 검증
+# v0.4.1 구현 및 검증
 
 검증일: 2026-10-01 (Asia/Seoul). 기반 소스: `ed72faa47421d20a354291b2919b79352275783d`.
 
@@ -19,10 +19,11 @@ AUTO 순서는 Anissia → Jimaku → Kitsunekko → embedded English입니다. 
 ## 검증 결과
 
 - `npm run typecheck` / `npm run build`: 성공.
-- `npm test`: 116개 테스트 성공.
+- `npm test`: 133개 테스트 성공.
 - `npm run test:browser`: 실제 MV3 Service Worker / 팝업 / content script를 사용하는 17개 검사 성공.
 - `npm run test:browser:progressive`: 기존 점진 번역 회귀 검사 9개 성공.
 - `node scripts/browser-frames.mjs`: Re:ANIME iframe / fullscreen / stale epoch / credential isolation 검사 5개 성공.
+- `npm run test:browser:anissia`: 실제 API·배포 페이지·ZIP을 사용하는 MV3 한국어 적용 검사 3개 성공. 권한 누락 안내, 425 Cue 전달, 첫 한국어 자막 표시를 확인했습니다.
 - Jimaku build key 분리: 테스트 값을 넣고 worker에만 포함되는지 검사한 뒤 키 없이 다시 빌드했습니다. `qa/build-security-report.json`.
 - 프로덕션 의존성 `npm audit --omit=dev`: 알려진 취약점 0개.
 
@@ -53,7 +54,7 @@ AUTO 순서는 Anissia → Jimaku → Kitsunekko → embedded English입니다. 
 
 ## 알려진 제한
 
-- Anissia 편성표에 없는 과거 작품은 이 경로에서 찾지 못할 수 있습니다.
+- 전체 작품 검색은 쿼리당 최대 4페이지로 제한합니다. 제작자 최신 페이지에 과거 파일이 없거나 외부 서비스의 동적 다운로드만 있는 경우 수동 후보로 배포 페이지를 안내합니다.
 - 개인 배포 페이지의 접근 권한이 없거나 로그인/JavaScript 다운로드가 필요하면 AUTO는 일본어/영어로 진행합니다. 필요한 도메인은 수동 Korean에서 승인할 수 있습니다.
 - 미러 제목이나 파일명에서 회차·시즌을 확정할 수 없으면 적용하지 않습니다. 사이트 context가 일반 숫자 회차일 때 OVA/SP/Special을 추측해서 연결하지 않습니다.
 - 원본 다운로드 캐시는 24시간입니다. 사이트가 같은 URL의 파일을 바꾸면 TTL 만료나 캐시 삭제 후 새 내용이 반영됩니다.
@@ -61,3 +62,11 @@ AUTO 순서는 Anissia → Jimaku → Kitsunekko → embedded English입니다. 
 - ASS의 고급 스타일, closed shadow DOM player, 로그인 전용 배포 서비스, 전체 player origin별 실기기 동작은 보장하지 않습니다.
 - 개발용 Vitest 3 계열에는 npm audit에서 중간 등급 2개 (동일 @vitest/mocker advisory의 직접/간접 항목)가 보고됩니다. 배포에 포함되지 않는 테스트 도구이며 runtime 의존성 검사 결과는 0개입니다. 테스트 도구 major 업그레이드는 이번 기능 개편에 포함하지 않았습니다.
 - 배포 ZIP은 Chrome의 개발자 모드에서 로드하는 MV3 확장입니다. Chrome Web Store 자동 설치 패키지는 아닙니다.
+
+## v0.4.1 한국어 검색 수정
+
+AniList GraphQL에 미사용 변수를 선언해 실제 HTTP 400이 발생하던 오류를 수정했습니다. 세 가지 lookup(id/idMal/search)은 사용하는 변수 하나만 선언하며 다른 시즌 검색 결과를 제목만 보고 채택하지 않습니다. 확인된 같은 작품의 이전 TV 시즌 회차 수로 누적 회차를 계산합니다. 다른 작품, 영화, 회차 수 불명은 제외합니다.
+
+사용자 페이지의 실제 Miruro Adapter는 영어 제목/2기/12화만 감지했습니다. 수정 후 AniList 210031 → Anissia 3495 → sumomomo.tistory.com/492 → blog.kakaocdn.net ZIP → Seihantai - 24.srt를 실제 요청으로 읽어 425개 한국어 Cue를 파싱했습니다. qa/anissia-live-report.json 및 qa/anissia-browser-live-report.json 참조. 브라우저 검사는 같은 감지 정보를 가진 테스트 영상 요소로 수행하며 실제 외부 영상의 재생/싱크는 별도입니다.
+
+편성표에 없는 작품은 홈페이지 전체 목록 검색을 이용합니다. 최신 caption과 다른 회차는 배포 페이지와 ZIP에서 파일 회차를 확인해야 적용합니다. 수동 모드에서 연결/timeout/파일 파싱 오류를 NOT_FOUND로 바꾸지 않고 원인과 배포 페이지를 제공합니다.
