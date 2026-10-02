@@ -1,5 +1,5 @@
 [
-  "ReANIME cross-origin iframe injected with pregranted test-origin permission",
+  "ReANIME cross-origin iframe injected automatically without an access button",
   "Worker routes Korean cues to actual video frame",
   "Container fullscreen keeps overlay inside fullscreen subtree",
   "Old episode APPLY rejected after newer CLEAR epoch",

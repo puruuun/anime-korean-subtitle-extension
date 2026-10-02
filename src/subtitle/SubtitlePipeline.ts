@@ -20,10 +20,17 @@ export interface PipelineResult {
   source: string;
 }
 export class SubtitlePipeline {
+  private blockedOrigins = new Set<string>();
   constructor(
     private providers: SubtitleProvider[],
     private settings: Settings,
-    private status: (s: { stage: string; message: string; source?: string }) => void,
+    private status: (s: {
+      stage: string;
+      message: string;
+      source?: string;
+      path?: string;
+      warnings?: string[];
+    }) => void,
     private signal: AbortSignal,
     private embedded?: () => Promise<SubtitleSource[]>,
   ) {}
@@ -34,7 +41,7 @@ export class SubtitlePipeline {
   ): Promise<PipelineResult | undefined> {
     const provider = this.providers.find((p) => p.id === 'anissia');
     if (!provider) return undefined;
-    this.status({ stage: 'search', message: '한국어 자막 검색 중...' });
+    this.status({ stage: 'search', message: 'Anissia 한국어 자막을 찾는 중...', path: 'Anissia' });
     let candidates: SubtitleSearchResult[] = [];
     let resolved = false;
     try {
@@ -52,6 +59,12 @@ export class SubtitlePipeline {
         for (const candidate of candidates.filter((r) => selected || r.autoEligible).slice(0, 8)) {
           signal.throwIfAborted();
           try {
+            this.status({
+              stage: 'download',
+              message:
+                '한국어 자막 다운로드·회차 확인 중 · ' + (candidate.author ?? candidate.release),
+              path: 'Anissia',
+            });
             if (normalizeEpisode(candidate.episode) !== normalizeEpisode(c.episode))
               throw new AppError('EPISODE', '선택한 자막 후보의 회차가 현재 영상과 다릅니다.');
             const usable = await loadUsableSubtitle(provider, candidate, c, signal);
@@ -64,13 +77,23 @@ export class SubtitlePipeline {
             return { cues: usable.cues, language: 'ko', source: 'anissia' };
           } catch (error) {
             signal.throwIfAborted();
-            if (error instanceof SubtitleLinkUnavailable)
+            if (error instanceof SubtitleLinkUnavailable) {
               Object.assign(candidate, {
                 pageUrl: error.resolution.pageUrl,
                 requiredOrigins: error.resolution.requiredOrigins,
                 linkMessage: error.message,
               });
-            else
+              for (const origin of error.resolution.requiredOrigins ?? [])
+                this.blockedOrigins.add(origin);
+              if (this.blockedOrigins.size)
+                this.status({
+                  stage: 'search',
+                  message: '다음 자막 소스를 확인하는 중...',
+                  warnings: [
+                    '배포 도메인 접근이 차단되어 있습니다. 설정에서 사이트 접근을 확인하세요.',
+                  ],
+                });
+            } else
               candidate.linkMessage =
                 error instanceof AppError
                   ? error.message
@@ -102,7 +125,11 @@ export class SubtitlePipeline {
     }
   }
   private async japanese(c: AnimeContext): Promise<PipelineResult | undefined> {
-    this.status({ stage: 'search', message: '일본어 자막 검색 중...' });
+    this.status({
+      stage: 'search',
+      message: 'Jimaku → Kitsunekko 일본어 자막을 찾는 중...',
+      path: 'Jimaku → Kitsunekko',
+    });
     const file = await new JapaneseSubtitleSearchManager(this.providers).resolve(c, this.signal);
     if (!file) return undefined;
     this.status({
@@ -113,7 +140,11 @@ export class SubtitlePipeline {
     return { cues: file.cues, language: 'ja', source: file.candidate.providerId };
   }
   private async english(): Promise<PipelineResult | undefined> {
-    this.status({ stage: 'extract', message: '사이트 영어 자막 추출 중...' });
+    this.status({
+      stage: 'extract',
+      message: '플레이어 영어 자막을 읽는 중...',
+      path: 'Embedded English',
+    });
     try {
       return await withDeadline(this.signal, 10000, async (signal) => {
         const sources = await this.embedded?.();
@@ -181,6 +212,13 @@ export class SubtitlePipeline {
       const en = await this.english();
       if (en) return en;
     }
+    if (this.blockedOrigins.size)
+      throw new AppError(
+        'HOST_ACCESS',
+        '배포 도메인 접근이 차단되었습니다: ' +
+          [...this.blockedOrigins].join(', ') +
+          ' · 설정에서 사이트 접근을 확인하세요.',
+      );
     throw new AppError('NOT_FOUND', '사용 가능한 한국어/일본어/영어 자막을 찾지 못했습니다.');
   }
 }

@@ -1,6 +1,7 @@
 import type { AnimeContext } from '../../anime/AnimeContext';
 import { positiveNumber, parseSeason } from '../../anime/episodeParser';
 import { bridgeStore } from '../../content/bridgeStore';
+import { siteAnimeId } from '../../anime/AnimeContext';
 export function miruroContext(doc: Document = document, url = location.href): AnimeContext {
   const u = new URL(url);
   const episode = positiveNumber(u.searchParams.get('ep'));
@@ -23,6 +24,7 @@ export function miruroContext(doc: Document = document, url = location.href): An
   const first = (v: unknown) => (Array.isArray(v) ? v[0] : v);
   return {
     site: 'miruro',
+    animeId: siteAnimeId(url),
     title,
     titles,
     episode,

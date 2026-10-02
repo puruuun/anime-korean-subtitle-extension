@@ -1,5 +1,7 @@
 export interface AnimeContext {
   site: 'miruro' | 'reanime';
+  /** Stable site catalogue ID, unaffected by late AniList metadata enrichment. */
+  animeId?: string;
   title: string;
   englishTitle?: string;
   romajiTitle?: string;
@@ -24,6 +26,24 @@ export interface AnimeContext {
   imdbId?: string;
   tmdbId?: number;
   pageUrl: string;
+}
+export function siteAnimeId(url: string): string | undefined {
+  try {
+    return new URL(url).pathname.match(/^\/watch\/([^/]+)/)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+export function episodeKey(c: AnimeContext): string {
+  const id =
+    c.animeId ??
+    siteAnimeId(c.pageUrl) ??
+    (c.anilistId
+      ? 'anilist-' + c.anilistId
+      : c.malId
+        ? 'mal-' + c.malId
+        : c.title.normalize('NFKC').toLowerCase());
+  return [c.site, id, c.season ?? 1, c.episode, c.episodeType ?? 'tv'].join(':');
 }
 export function contextKey(c: AnimeContext) {
   return JSON.stringify([

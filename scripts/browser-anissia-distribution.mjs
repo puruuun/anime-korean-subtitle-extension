@@ -7,6 +7,7 @@ const temp = await mkdtemp(join(tmpdir(), 'animesub-distribution-'));
 const dist = join(temp, 'extension');
 await cp(resolve('dist'), dist, { recursive: true });
 const originalManifest = JSON.parse(await readFile(join(dist, 'manifest.json'), 'utf8'));
+const publicManifest = JSON.parse(await readFile(resolve('manifest.json'), 'utf8'));
 const tests = [],
   requests = [];
 const cases = [
@@ -30,10 +31,13 @@ const cases = [
   },
 ];
 for (const permissions of ['none', 'blog', 'all']) {
-  const manifest = structuredClone(originalManifest);
+  const manifest = structuredClone(permissions === 'all' ? originalManifest : publicManifest);
+  if (permissions !== 'all')
+    manifest.host_permissions = manifest.host_permissions.filter(
+      (origin) => !/blogspot|drive\.|tistory|kakaocdn/.test(origin),
+    );
   if (permissions !== 'none') manifest.host_permissions.push('https://kairan03.blogspot.com/*');
-  if (permissions === 'all')
-    manifest.host_permissions.push('https://drive.usercontent.google.com/*');
+
   await writeFile(join(dist, 'manifest.json'), JSON.stringify(manifest));
   const context = await chromium.launchPersistentContext(join(temp, permissions), {
     channel: 'chromium',
@@ -67,7 +71,7 @@ for (const permissions of ['none', 'blog', 'all']) {
         route.fulfill({
           contentType: 'text/html',
           body:
-            '<title>Subtitle test</title><h1 class="anime-title">' +
+            '<meta charset="utf-8"><title>Subtitle test</title><h1 class="anime-title">' +
             example.title +
             '</h1><video controls style="width:800px;height:450px"></video>',
         }),
@@ -172,7 +176,9 @@ const report = {
   tests,
   requests,
   scope:
-    'Built MV3 extension, real Anissia/Blogspot/feed/Drive requests; controlled video and explicit anime context; host permissions granted in temporary test manifests only; actual external playback/sync not tested',
+    'Built MV3 extension, real Anissia/Blogspot/feed/Drive requests; controlled video and explicit context; positive manifest profile: ' +
+    (originalManifest.host_permissions.includes('<all_urls>') ? 'personal' : 'public') +
+    '; negative manifests remove required resolver hosts; actual external playback/sync not tested',
 };
 await mkdir('qa', { recursive: true });
 await writeFile('qa/anissia-distribution-browser-report.json', JSON.stringify(report, null, 2));

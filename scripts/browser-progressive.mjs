@@ -194,7 +194,7 @@ async function configure(model, immediatePlayback) {
 async function beginRun() {
   const before = await status();
   await popup.getByText('사이트 영어 자막 → 한국어 번역', { exact: true }).click();
-  await popup.getByRole('button', { name: '한국어 자막 적용', exact: true }).click();
+  await popup.getByRole('button', { name: '수동 자막 실행', exact: true }).click();
   return eventually(async () => {
     const current = await status();
     if (current?.stage === 'error') throw Error(current.message);
@@ -428,11 +428,13 @@ try {
   phase = 'spa';
   await site.evaluate(() => history.pushState({}, '', '?ep=2'));
   await eventually(() => immediateSecond.aborted, 'previous episode aborted by SPA navigation');
+  await eventually(async () => (await status())?.stage === 'manual', 'manual episode awaits user');
+  await beginRun();
   const next = await done(2);
   assert(next.epoch > old.epoch && next.jobId !== old.jobId);
   assert.equal((await render()).cues.length, cueCount);
   pass(
-    'SPA episode change aborts the previous request, advances the epoch and starts a fresh episode queue',
+    'SPA episode change aborts the previous request; explicit manual execution advances the epoch and starts its new queue',
   );
 
   phase = 'failure';

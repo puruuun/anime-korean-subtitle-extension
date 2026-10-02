@@ -9,7 +9,7 @@
     "Background queue finishes the whole episode with original cue IDs and times preserved",
     "A repeated episode restores all chunk caches without any new LLM requests",
     "Immediate mode keeps video playing and source English visible until the first Korean chunk becomes available",
-    "SPA episode change aborts the previous request, advances the epoch and starts a fresh episode queue",
+    "SPA episode change aborts the previous request; explicit manual execution advances the epoch and starts its new queue",
     "Only the failed chunk retries; other chunks remain usable and a rerun restores caches before retrying the missing chunk"
   ],
   "requests": [

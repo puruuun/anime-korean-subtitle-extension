@@ -159,6 +159,13 @@ try {
   );
   const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
   const id = new URL(worker.url()).host;
+  for (
+    let i = 0;
+    i < 100 &&
+    !context.pages().some((p) => p.url() === 'chrome-extension://' + id + '/settings.html');
+    i++
+  )
+    await new Promise((r) => setTimeout(r, 50));
   await worker.evaluate(async (port) => {
     await chrome.storage.local.set({
       settings: {

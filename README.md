@@ -1,21 +1,25 @@
-# Anime Korean Subtitle v0.4.2
+# Anime Korean Subtitle v0.5.0
 
 Miruro / Re:ANIME의 현재 작품과 회차를 감지하고 한국어 자막을 준비하는 Chrome Manifest V3 확장프로그램입니다. 영상·오디오는 다운로드하거나 전사하지 않습니다.
 
 ## 다른 컴퓨터에 설치
 
-1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.4.2.zip`을 받습니다.
+1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.5.0.zip`을 받습니다.
 2. ZIP을 폴더에 압축 해제합니다. 그 폴더의 `extension/manifest.json`을 확인합니다.
 3. Chrome에서 `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
 4. **압축해제된 확장 프로그램 로드**를 눌러 `extension` 폴더를 선택합니다.
 5. 설정에서 **Local LLM** 또는 **Gemini API**를 연결합니다. 한국어 원본 자막에는 번역 서버가 필요 없습니다.
-6. Miruro / Re:ANIME 회차를 열거나 새로고침합니다. 외부 플레이어·자막 CDN은 팝업의 **플레이어·자막 접근 허용**으로 해당 도메인만 승인합니다.
+6. Miruro / Re:ANIME 회차를 열거나 새로고침합니다. 회차 선택만으로 자막 검색·다운로드·번역·적용이 자동 실행됩니다.
+
+기본 ZIP은 **개인용** 빌드입니다. 설치 시 모든 웹사이트 접근 권한(`<all_urls>`)을 사용하며 재생 중 별도의 권한 창을 요청하지 않습니다. 제한된 권한이 필요하면 `anime-korean-subtitle-public-v0.5.0.zip`을 사용하세요. 공개용의 알려지지 않은 배포·플레이어·번역 서버는 재생 전에 설정의 초기 접근 설정에서 한 번 승인합니다. AUTO가 대신 권한 창을 띄우지 않습니다.
 
 확장 폴더는 설치 후에도 삭제하지 마세요. 업데이트 때는 같은 폴더를 새 버전으로 바꾸고 확장 페이지에서 새로고침하세요. 로그인 정보·개인 API Key는 배포 ZIP에 포함하지 않습니다.
 
 ## 자동 / 수동
 
-기본은 **자동**입니다. 영상이 감지되면 팝업을 열거나 적용 버튼을 누르지 않아도 시작합니다.
+신규 설치 기본값은 **자동 + 자동 적용 켜짐**입니다. 팝업을 열거나 실행 버튼을 누르지 않아도 시작합니다. 기존에 직접 선택한 수동 설정은 유지되므로 업데이트 후 자동을 원하면 **자동 전환**을 누르세요.
+
+상단 작업 상태창은 고정되어 현재 작품·회차, 찾는 중/다운로드/번역/재시도, Source, 재생 시각과 번역 완료 시각을 표시합니다. 수동 전환은 작업 중에도 가능하며 이전 검색·다운로드·번역과 예약된 재시도를 취소합니다. AUTO에는 **다시 검색 / 번역 재시작**만 있고 수동 실행은 명시적으로 수동 모드를 선택했을 때만 제공합니다.
 
 ```text
 Anissia 한국어 자막 → 바로 표시
@@ -37,7 +41,15 @@ Kitsunekko 미러 일본어 자막 → 한국어 점진 번역
 | 일본어 자막 검색 → 한국어 번역 | Jimaku → Kitsunekko만 사용      |
 | 사이트 영어 자막 → 한국어 번역 | 외부 검색 없이 내장 영어만 사용 |
 
-설정의 **자막 자동 검색 설정**에서 세 단계를 각각 끌 수 있습니다. 새 설치에서는 모두 켜져 있습니다. 자막 끄기/취소를 누르면 그 페이지에서는 자동으로 다시 시작하지 않습니다. 다음 회차를 열거나 적용 버튼을 누르면 다시 사용할 수 있습니다.
+설정의 **자막 자동 검색 설정**에서 세 단계를 각각 끌 수 있습니다. 새 설치에서는 모두 켜져 있습니다. 자막 끄기/취소를 누르면 그 페이지에서는 자동으로 다시 시작하지 않습니다. 다음 회차를 열거나 다시 검색을 누르면 다시 사용할 수 있습니다.
+
+## 회차 감지·재시도·캐시
+
+공통 `EpisodeLifecycleManager`가 pushState / replaceState / popstate / DOM·player 변경을 감지합니다. 작품 ID·시즌·회차를 포함한 key와 400ms 안정성 확인으로 중복 실행을 막고 회차 이동 시 즉시 이전 작업을 중단합니다. 전체 페이지 이동도 취소합니다. 같은 회차의 플레이어 교체는 저장된 렌더러 상태만 복원합니다.
+
+실패한 AUTO 검색·번역은 3초 → 6초 → 12초 → 20초 → 20초 간격으로 최대 6회 실행합니다. 새 재시도 시작은 회차 진입 후 2분 이내로 제한합니다. 플레이어는 준비될 때까지 1초 간격으로 확인하며 DOM에 나타나면 즉시 반응합니다. 잘못된 번역 설정/접근 차단은 반복 재시도하지 않습니다. 이미 진행 중인 정상 번역은 계속 진행됩니다.
+
+24시간 회차 캐시를 네트워크 검색보다 먼저 적용합니다. 완료 자막은 재방문 시 검색·다운로드·모델 호출을 생략하고, 부분 번역은 원본 Cue와 완료 Chunk를 복원한 뒤 누락 구간만 이어갑니다. **다시 검색**은 회차 캐시를 건너뛰며 기존 원본/Chunk 캐시는 계속 사용할 수 있습니다.
 
 ## 번역 엔진
 
@@ -58,7 +70,7 @@ Kitsunekko 미러 일본어 자막 → 한국어 점진 번역
 
 `website`는 배포 페이지일 수 있습니다. SMI / SRT / ASS / SSA / VTT / ZIP, 정적 파일 링크와 공개 Google Drive 파일 링크를 해석합니다. Blogspot의 최신 글에 요청 회차가 없으면 공개 글 목록에서 같은 작품·시즌의 이전 회차 글을 찾습니다. 통합 ZIP은 내부 파일명으로 요청 회차를 선택하며, 오래된 한글 ZIP 파일명과 `Lv1 미완성.ass`, `작품명 2 01.ass` 형식도 확인합니다. 본문의 폰트 링크와 다른 작품·시즌의 검색 결과는 제외합니다.
 
-배포 도메인은 수동 후보의 **접근 허용 후 적용**으로 승인할 수 있습니다. Blogspot 이후 Google Drive를 이용하면 `drive.usercontent.google.com` 파일 도메인도 같은 버튼으로 한 번 더 승인해야 할 수 있습니다. 권한이 없거나 회차를 확정할 수 없으면 배포 페이지와 원인을 안내하며, AUTO는 다음 소스로 진행합니다. 로그인 전용 파일, Drive 폴더, 다운로드 제한, JavaScript로 생성되는 링크는 지원하지 않을 수 있습니다. Blogspot 이전 글 검색은 최대 100개 결과로 제한합니다.
+Blogspot·티스토리·Google Drive 배포 host는 공개용에서도 필수 설치 권한입니다. 개인용에서는 새 외부 host도 추가 승인 없이 읽습니다. 공개용에서 미리 승인하지 않은 host가 필요하면 배포 페이지와 원인을 안내하고 다음 소스로 진행합니다. 모든 경로가 실패하면 설정 확인을 안내하며 권한 요청을 반복하지 않습니다. 로그인 전용 파일, Drive 폴더, 다운로드 제한, JavaScript로 생성되는 링크는 지원하지 않을 수 있습니다. Blogspot 이전 글 검색은 최대 100개 결과로 제한합니다.
 
 ### Jimaku
 
@@ -76,7 +88,7 @@ SRT / ASS / SSA / VTT를 지원합니다. `01`, `E01`, `EP01`, `Episode 01`, `S0
 
 API 요청은 service worker에서 수행합니다. local/session storage는 `TRUSTED_CONTEXTS`로 제한하며 페이지·Content Script에 API Key나 전체 설정을 전달하지 않습니다. MAIN bridge는 기존 공개 자막 응답을 읽기만 합니다. 자막 다운로드는 쿠키 없이 수행하고 크기를 제한합니다.
 
-필수 권한은 지원 사이트, Anissia, Jimaku, 미러 카탈로그/파일, Gemini, localhost로 제한합니다. 선택적 HTTP/HTTPS 권한은 사용자가 선택한 플레이어·자막·로컬 서버 도메인을 승인할 때만 사용합니다. 자동 한국어 단계 전체 10초(수동 한국어는 30초), 각 일본어 Provider 전체 8초, 내장 영어 단계 전체 10초를 넘기면 다음 경로로 진행합니다. 번역 timeout은 별도 설정입니다.
+개인용 빌드는 required `<all_urls>`이며 optional host와 `activeTab`을 사용하지 않습니다. 공개용 required host는 지원 사이트, 실제 확인된 `strm.cx` / `flixcloud.cc`, Anissia·Jimaku·미러·Gemini·localhost, Blogspot·티스토리·Google Drive입니다. 공개용에만 optional HTTP/HTTPS를 남겨 초기 설정에서 알려지지 않은 host를 승인할 수 있습니다. `chrome.permissions.request`는 초기 설정 helper에만 남아 있으며 AUTO와 팝업에는 없습니다. Chrome이 필수 접근을 차단하면 확장 세부정보를 안내하고 자동 권한 요청은 하지 않습니다. 자동 한국어 단계 전체 10초(수동 한국어는 30초), 각 일본어 Provider 전체 8초, 내장 영어 단계 전체 10초를 넘기면 다음 경로로 진행합니다. 번역 timeout은 별도 설정입니다.
 
 ## 개발 및 검증
 
@@ -84,9 +96,12 @@ Node.js 22 이상을 권장합니다.
 
 ```sh
 npm ci
+npm run build:personal # 기본 설치 ZIP용
+npm run build:public   # 제한된 설치 권한용
 npm run check
 npx playwright install chromium
 npm run test:browser
+npm run test:browser:auto
 npm run test:browser:progressive
 npm run test:browser:anissia
 npm run test:anissia:distribution
@@ -97,6 +112,6 @@ node scripts/verify-live-provider.mjs
 node scripts/research-live.mjs
 ```
 
-`dist/`는 Chrome에 로드할 결과물입니다. `npm run check`는 typecheck, unit tests, build를 실행합니다. 브라우저 회귀 검사는 격리된 실제 MV3 확장과 모의 서비스/번역 응답을 사용합니다. Anissia 배포 형태 검사는 실제 Blogspot·Drive·티스토리 파일을 사용하며 `qa/anissia-distribution-report.json` 및 `qa/anissia-distribution-browser-report.json`에 기록합니다. 다른 실제 서비스 확인은 `qa/services-report.json`, 실제 페이지에서 실행한 두 Adapter 결과는 `qa/live-site-research.json`에 기록합니다. 상세 검증 범위와 제한은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
+`dist/`는 Chrome에 로드할 결과물입니다. `npm run check`는 typecheck, unit tests, build를 실행합니다. 브라우저 회귀 검사는 격리된 실제 MV3 확장과 모의 서비스/번역 응답을 사용합니다. Anissia 배포 형태 검사는 실제 Blogspot·Drive·티스토리 파일을 사용하며 `qa/anissia-distribution-report.json` 및 `qa/anissia-distribution-browser-report.json`에 기록합니다. 다른 실제 서비스 확인은 `qa/services-report.json`, 실제 페이지에서 실행한 두 Adapter 결과는 `qa/live-site-research.json`에 기록합니다. 이번 권한/AUTO 개편의 상세 결과는 [qa/AUTO-UX-REPORT-v0.5.0.md](qa/AUTO-UX-REPORT-v0.5.0.md)를 참고하세요. 상세 검증 범위와 제한은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
 
 자막 렌더러, 회차별 싱크, fullscreen, seek와 progressive buffer UI는 유지됩니다. ASS는 시간·대사 중심으로 처리하며 고급 스타일을 보존하지 않습니다. HLS는 WebVTT subtitle segment만 읽습니다.

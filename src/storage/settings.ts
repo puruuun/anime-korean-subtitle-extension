@@ -4,6 +4,7 @@ export interface Settings {
   autoSources: { anissia: boolean; japaneseTranslation: boolean; embeddedEnglish: boolean };
   jimaku: { apiKey: string };
   mode: 'ko' | 'ja' | 'en' | 'auto';
+  autoApply: boolean;
   translation: {
     provider: 'lmstudio' | 'gemini';
     geminiApiKey: string;
@@ -28,6 +29,7 @@ export interface Settings {
 export const defaultSettings: Settings = {
   schemaVersion: 2,
   mode: 'auto',
+  autoApply: true,
   autoSources: { anissia: true, japaneseTranslation: true, embeddedEnglish: true },
   jimaku: { apiKey: '' },
   translation: {
@@ -64,6 +66,7 @@ export function normalizeSettings(settings?: Partial<Settings>): Settings {
   const mode = settings?.mode;
   return {
     schemaVersion: 2,
+    autoApply: settings?.autoApply !== false,
     mode:
       mode && ['auto', 'ko', 'ja', 'en'].includes(mode)
         ? settings?.schemaVersion !== 2 && mode === 'ko'
@@ -87,6 +90,7 @@ export async function getSettings(): Promise<Settings> {
 export function validateSettings(s: Settings) {
   if (
     !['auto', 'ko', 'ja', 'en'].includes(s.mode) ||
+    typeof s.autoApply !== 'boolean' ||
     Object.values(s.autoSources).some((v) => typeof v !== 'boolean') ||
     typeof s.jimaku.apiKey !== 'string'
   )

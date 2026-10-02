@@ -6,16 +6,17 @@ import assert from 'node:assert/strict';
 const temp = await mkdtemp(join(tmpdir(), 'animesub-anissia-live-'));
 const dist = join(temp, 'extension');
 await cp(resolve('dist'), dist, { recursive: true });
-const manifest = JSON.parse(await readFile(join(dist, 'manifest.json'), 'utf8'));
+const baseManifest = JSON.parse(await readFile(join(dist, 'manifest.json'), 'utf8'));
+const publicManifest = JSON.parse(await readFile(resolve('manifest.json'), 'utf8'));
 const url =
   'https://www.miruro.to/watch/qFe2jyMO-z1LwHyLlLpGyRUbWSg0g55W/seihantai-na-kimi-to-boku-2nd-season?ep=12';
 const results = [];
 for (const permitted of [false, true]) {
-  manifest.host_permissions = manifest.host_permissions.filter(
-    (origin) => !/sumomomo|kakaocdn/.test(origin),
-  );
-  if (permitted)
-    manifest.host_permissions.push('https://sumomomo.tistory.com/*', 'https://blog.kakaocdn.net/*');
+  const manifest = structuredClone(permitted ? baseManifest : publicManifest);
+  if (!permitted)
+    manifest.host_permissions = manifest.host_permissions.filter(
+      (origin) => !/tistory|kakaocdn|blogspot|drive\./.test(origin),
+    );
   await writeFile(join(dist, 'manifest.json'), JSON.stringify(manifest));
   const context = await chromium.launchPersistentContext(
     join(temp, permitted ? 'allowed' : 'denied'),
@@ -38,7 +39,10 @@ for (const permitted of [false, true]) {
         return r;
       }, msg);
     const settings = (await send({ type: 'GET_SETTINGS' })).settings;
-    await send({ type: 'SAVE_SETTINGS', settings: { ...settings, mode: 'ko' } });
+    await send({
+      type: 'SAVE_SETTINGS',
+      settings: { ...settings, mode: permitted ? 'auto' : 'ko' },
+    });
     await context.route(url, (route) =>
       route.fulfill({
         contentType: 'text/html',
@@ -52,12 +56,17 @@ for (const permitted of [false, true]) {
       async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url).id,
       url,
     );
-    const started = await send({ type: 'RUN', tabId, mode: 'ko' });
+    const started = permitted ? undefined : await send({ type: 'RUN', tabId, mode: 'ko' });
     let status;
     const expires = Date.now() + 60000;
     while (Date.now() < expires) {
       status = (await send({ type: 'GET_STATUS', tabId })).status;
-      if (status?.jobId === started.status.jobId && !status.busy) break;
+      if (
+        status &&
+        !status.busy &&
+        (permitted ? status.stage === 'done' : status.jobId === started.status.jobId)
+      )
+        break;
       await new Promise((r) => setTimeout(r, 100));
     }
     if (!permitted) {
@@ -97,7 +106,7 @@ for (const permitted of [false, true]) {
         'First Korean cue did not render',
       );
       results.push(
-        'Real AniList + Anissia + Tistory + CDN requests finish with 425 Korean cues in the built MV3 extension',
+        'AUTO runs without a Start button and real AniList + Anissia + Tistory + CDN requests deliver 425 Korean cues',
       );
       results.push(
         'Season 2 episode 12 accepts verified cumulative episode 24 and renders its first Korean cue',
@@ -113,7 +122,9 @@ const report = {
   passed: results.length,
   tests: results,
   scope:
-    'Built MV3 with a controlled video page matching the actual Miruro adapter context; real public API/page/ZIP requests; optional hosts granted only in temporary test manifest; actual external video playback not tested',
+    'Built MV3 with controlled video and real API/page/ZIP requests; positive manifest profile: ' +
+    (baseManifest.host_permissions.includes('<all_urls>') ? 'personal' : 'public') +
+    '; negative manifest removes required resolver hosts; actual external video playback not tested',
 };
 await writeFile('qa/anissia-browser-live-report.json', JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));

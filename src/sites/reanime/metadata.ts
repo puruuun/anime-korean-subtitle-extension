@@ -1,6 +1,7 @@
 import type { AnimeContext } from '../../anime/AnimeContext';
 import { positiveNumber, parseEpisode, parseSeason } from '../../anime/episodeParser';
 import { bridgeStore } from '../../content/bridgeStore';
+import { siteAnimeId } from '../../anime/AnimeContext';
 export function reanimeContext(doc: Document = document, url = location.href): AnimeContext {
   const u = new URL(url);
   let title = '',
@@ -48,6 +49,7 @@ export function reanimeContext(doc: Document = document, url = location.href): A
   const mt = typeof m?.title === 'object' ? m.title : undefined;
   return {
     site: 'reanime',
+    animeId: siteAnimeId(url),
     title,
     episode,
     season: parseSeason(title),

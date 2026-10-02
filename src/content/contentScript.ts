@@ -6,7 +6,7 @@ import type { SubtitleCue } from '../subtitle/SubtitleCue';
 import type { TranslationBufferStatus } from '../translation/TranslationQueue';
 import { adapterFor } from '../sites/adapter';
 import { observeNavigation } from './navigationObserver';
-import { normalizeTitle } from '../anime/titleNormalizer';
+import { EpisodeLifecycleManager } from './EpisodeLifecycleManager';
 declare global {
   interface Window {
     __animeSubIsolatedV1?: boolean;
@@ -22,8 +22,8 @@ if (!window.__animeSubIsolatedV1) {
     offset = 0,
     epoch = 0,
     clearRevision = 0,
-    lastIdentity = '',
-    lastUrl = location.href,
+    playerRevision = 0,
+    lastProbeAt = 0,
     alive = true,
     busy = false,
     immediatePlayback = false,
@@ -109,6 +109,8 @@ if (!window.__animeSubIsolatedV1) {
   async function probe() {
     const next = findVideo();
     if (next !== video) {
+      playerRevision++;
+      lastProbeAt = 0;
       finishPreparation(false);
       if (video) for (const name of playbackEvents) video.removeEventListener(name, onVideoEvent);
       renderer?.destroy();
@@ -118,7 +120,15 @@ if (!window.__animeSubIsolatedV1) {
       configureRenderer();
     }
     const r = video?.getBoundingClientRect();
-    await message({ type: 'FRAME_READY', hasVideo: !!video, area: r ? r.width * r.height : 0 });
+    if (Date.now() - lastProbeAt >= 1000) {
+      lastProbeAt = Date.now();
+      await message({
+        type: 'FRAME_READY',
+        hasVideo: !!video,
+        area: r ? r.width * r.height : 0,
+        playerRevision,
+      });
+    }
   }
   const probeTimer = setInterval(() => {
     if (alive) void probe();
@@ -130,45 +140,38 @@ if (!window.__animeSubIsolatedV1) {
   const heartbeat = setInterval(() => {
     if (busy) void message({ type: 'HEARTBEAT' });
   }, 15000);
-  async function checkContext() {
-    if (window !== window.top) return;
-    const a = adapterFor(location.href);
-    if (!a) return;
-    try {
-      const context = await a.getAnimeContext();
-      const identity = JSON.stringify([
-        new URL(context.pageUrl).pathname,
-        context.episode,
-        normalizeTitle(context.title),
-      ]);
-      if (lastIdentity && identity !== lastIdentity) {
-        resetPlayer(true);
-        clearBridge();
-        busy = false;
-        await message({ type: 'CONTEXT_CHANGED' });
-      }
-      lastIdentity = identity;
-    } catch {
-      if (location.href !== lastUrl) {
-        resetPlayer(true);
-        clearBridge();
-        busy = false;
-        await message({ type: 'CONTEXT_CHANGED' });
-        lastIdentity = '';
-      }
-    }
-    lastUrl = location.href;
-  }
+  const lifecycle =
+    window === window.top && adapterFor(location.href)
+      ? new EpisodeLifecycleManager({
+          url: () => location.href,
+          detect: async () => {
+            const adapter = adapterFor(location.href);
+            if (!adapter) throw Error('지원하는 사이트가 아닙니다.');
+            return adapter.getAnimeContext();
+          },
+          navigate: async () => {
+            resetPlayer(true);
+            clearBridge();
+            busy = false;
+            await message({ type: 'EPISODE_NAVIGATING' });
+          },
+          ready: async (context) => {
+            await message({ type: 'EPISODE_READY', context });
+          },
+        })
+      : undefined;
   const stopNavigation = observeNavigation(() => {
-    void checkContext();
+    void probe();
+    void lifecycle?.check();
   });
-  void checkContext();
+  void lifecycle?.check();
   window.addEventListener('pagehide', () => {
     alive = false;
     clearInterval(probeTimer);
     clearInterval(playbackTimer);
     clearInterval(heartbeat);
     stopNavigation();
+    lifecycle?.stop();
     finishPreparation(false);
     if (video) for (const name of playbackEvents) video.removeEventListener(name, onVideoEvent);
     renderer?.destroy();

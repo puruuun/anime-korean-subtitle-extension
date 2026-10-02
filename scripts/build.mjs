@@ -1,5 +1,6 @@
 import { build } from 'vite';
-import { copyFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
+import { buildManifest } from './manifest-config.mjs';
 await build();
 for (const [name, entry] of [
   ['contentScript', 'src/content/contentScript.ts'],
@@ -17,5 +18,14 @@ for (const [name, entry] of [
     },
   });
 }
-await copyFile('manifest.json', 'dist/manifest.json');
+const target = process.env.ANIMESUB_BUILD_TARGET ?? 'personal';
+await writeFile(
+  'dist/manifest.json',
+  JSON.stringify(
+    buildManifest(JSON.parse(await readFile('manifest.json', 'utf8')), target),
+    null,
+    2,
+  ),
+);
+console.log('Permission profile: ' + target);
 console.log('MV3 extension ready: dist/');

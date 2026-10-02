@@ -1,0 +1,63 @@
+{
+  "checkedAt": "2026-10-01T19:36:31.113Z",
+  "passed": 24,
+  "tests": [
+    "Fresh install has AUTO + autoApply + required install-time access (public); no activeTab",
+    "New installation opens its initial settings page",
+    "Miruro EP1 applies Korean automatically without opening popup controls or pressing Start",
+    "Miruro EP2 automatically cancels old episode and applies Korean with no permission prompt",
+    "Changing Miruro anime automatically starts the new catalogue identity",
+    "Revisited Korean episode renders from episode cache before AniList/provider/download network",
+    "Mutation storms and same-episode replaceState do not duplicate search/download/translation",
+    "Browser back/forward restores the correct episode and its cache",
+    "Jimaku fallback registers the first 20 translated cues while later translation is pending",
+    "Completed translated episode reappears immediately with zero provider or LLM requests",
+    "Automatic failed-chunk retry restores partial episode/source caches and only retranslates missing cues without new searches/downloads",
+    "Missing Jimaku result automatically falls through to Kitsunekko → Local LLM",
+    "Missing Japanese subtitles automatically falls through to embedded English → Local LLM",
+    "Rapid EP1 → EP2 → EP3 aborts EP1 LLM, coalesces EP2 and renders only EP3 without duplicate translation",
+    "A transient upstream failure shows a countdown and retries automatically after three seconds",
+    "Switching to manual cancels the ongoing job/retry and new episodes wait for explicit manual execution",
+    "Returning to AUTO resumes the current episode without a Start button",
+    "A page with no ready video waits without provider requests and starts AUTO when its player appears",
+    "Re:ANIME detects the cross-origin flixcloud player and applies Korean automatically",
+    "Re:ANIME SPA EP2 automatically applies Korean to its new iframe with no permission request",
+    "Changing the player iframe preserves the episode job and restores its renderer without another search",
+    "Work status stays fixed above the scrolling controls; branding and the primary Apply button are removed",
+    "Settings has only the requested Korean title and exposes explicit AUTO/Manual and initial access setup",
+    "Every tested episode/fallback/player change completes with zero runtime permission requests"
+  ],
+  "timings": [
+    {
+      "case": "Korean episode revisit",
+      "elapsedMs": 924,
+      "networkSearches": 0
+    },
+    {
+      "case": "Translated episode revisit",
+      "elapsedMs": 960,
+      "networkSearches": 0,
+      "llmCalls": 0
+    },
+    {
+      "case": "Transient 503 → automatic retry",
+      "elapsedMs": 4023,
+      "initialDelayMs": 3000
+    },
+    {
+      "case": "Hydrated player readiness",
+      "elapsedMs": 173
+    }
+  ],
+  "counts": {
+    "anissia": 46,
+    "jimaku": 15,
+    "mirror": 5,
+    "downloads": 11,
+    "llm": 15,
+    "aborted": 2
+  },
+  "permissionRequests": 0,
+  "manifestChangedForTests": false,
+  "scope": "Fresh isolated Chromium installation of the unmodified public build; simulated site/player/subtitle/LLM services, real MV3 routing/storage/history/content scripts; actual remote videos and model quality are separately scoped"
+}

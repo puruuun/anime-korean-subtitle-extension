@@ -6,7 +6,7 @@ import type { SubtitleSearchResult, SubtitleProvider } from '../providers/Subtit
 import { TranslationQueue, type TranslationBufferStatus } from '../translation/TranslationQueue';
 import { createTranslationProvider } from '../translation/createTranslationProvider';
 import { AppError } from '../utils/errors';
-import { SubtitlePipeline, type Mode } from './SubtitlePipeline';
+import { SubtitlePipeline, type Mode, type PipelineResult } from './SubtitlePipeline';
 export { SelectionRequired } from './SubtitleSelection';
 export type { Mode } from './SubtitlePipeline';
 export interface CoreStatus {
@@ -89,14 +89,21 @@ export class SubtitleCore {
       this.source,
     );
   }
-  async run(c: AnimeContext, mode: Mode, selected?: SubtitleSearchResult): Promise<SubtitleCue[]> {
-    const result = await new SubtitlePipeline(
-      this.providers,
-      this.settings,
-      this.status,
-      this.signal,
-      this.embedded,
-    ).resolve(c, mode, selected);
+  async run(
+    c: AnimeContext,
+    mode: Mode,
+    selected?: SubtitleSearchResult,
+    cachedSource?: PipelineResult,
+  ): Promise<SubtitleCue[]> {
+    const result =
+      cachedSource ??
+      (await new SubtitlePipeline(
+        this.providers,
+        this.settings,
+        this.status,
+        this.signal,
+        this.embedded,
+      ).resolve(c, mode, selected));
     this.signal.throwIfAborted();
     this.source = result.source;
     if (result.language === 'ko') {

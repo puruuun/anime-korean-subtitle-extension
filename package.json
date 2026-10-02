@@ -1,6 +1,6 @@
 {
   "name": "anime-korean-subtitle",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,10 +9,13 @@
     "test": "vitest run",
     "test:browser": "node scripts/browser-test.mjs",
     "check": "npm run typecheck && npm test && npm run build",
+    "test:browser:auto": "node scripts/browser-auto-lifecycle.mjs",
     "test:browser:progressive": "node scripts/browser-progressive.mjs",
     "test:browser:anissia": "node scripts/browser-anissia-live.mjs",
     "test:anissia:distribution": "node scripts/verify-anissia-distribution.mjs",
-    "test:browser:distribution": "node scripts/browser-anissia-distribution.mjs"
+    "test:browser:distribution": "node scripts/browser-anissia-distribution.mjs",
+    "build:personal": "ANIMESUB_BUILD_TARGET=personal npm run build",
+    "build:public": "ANIMESUB_BUILD_TARGET=public npm run build"
   },
   "dependencies": {
     "fflate": "^0.8.2",

@@ -1,0 +1,86 @@
+{
+  "checkedAt": "2026-10-01T19:26:10.953Z",
+  "results": [
+    {
+      "initialDelayMs": 2000,
+      "serviceReadyMs": 1000,
+      "elapsedMs": 3232,
+      "requests": 2
+    },
+    {
+      "initialDelayMs": 2000,
+      "serviceReadyMs": 4500,
+      "elapsedMs": 7836,
+      "requests": 3
+    },
+    {
+      "initialDelayMs": 2000,
+      "serviceReadyMs": 9000,
+      "elapsedMs": 16441,
+      "requests": 4
+    },
+    {
+      "initialDelayMs": 3000,
+      "serviceReadyMs": 1000,
+      "elapsedMs": 4234,
+      "requests": 2
+    },
+    {
+      "initialDelayMs": 3000,
+      "serviceReadyMs": 4500,
+      "elapsedMs": 10841,
+      "requests": 3
+    },
+    {
+      "initialDelayMs": 3000,
+      "serviceReadyMs": 9000,
+      "elapsedMs": 10840,
+      "requests": 3
+    },
+    {
+      "initialDelayMs": 5000,
+      "serviceReadyMs": 1000,
+      "elapsedMs": 6227,
+      "requests": 2
+    },
+    {
+      "initialDelayMs": 5000,
+      "serviceReadyMs": 4500,
+      "elapsedMs": 6227,
+      "requests": 2
+    },
+    {
+      "initialDelayMs": 5000,
+      "serviceReadyMs": 9000,
+      "elapsedMs": 16834,
+      "requests": 3
+    }
+  ],
+  "averages": [
+    {
+      "initialDelayMs": 2000,
+      "meanLatencyMs": 9170,
+      "requests": 9
+    },
+    {
+      "initialDelayMs": 3000,
+      "meanLatencyMs": 8638,
+      "requests": 8
+    },
+    {
+      "initialDelayMs": 5000,
+      "meanLatencyMs": 9763,
+      "requests": 7
+    }
+  ],
+  "selectedDelaysMs": [
+    3000,
+    6000,
+    12000,
+    20000,
+    20000
+  ],
+  "playerCheckMs": 1000,
+  "episodeDeadlineMs": 120000,
+  "scope": "Controlled real loopback HTTP requests, 600ms response cost, service warmup at 1s/4.5s/9s. Three-second initial delay has lowest mean latency in these scenarios; remote services may vary."
+}

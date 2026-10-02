@@ -9,6 +9,8 @@ function SettingsPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [models, setModels] = useState<string[]>([]);
+  const [extraHost, setExtraHost] = useState('');
+  const personal = chrome.runtime.getManifest().host_permissions?.includes('<all_urls>');
   useEffect(() => {
     void send<{ settings: Settings }>({ type: 'GET_SETTINGS' }).then(
       (r) => setS(r.settings),
@@ -36,9 +38,83 @@ function SettingsPage() {
   const t = s.translation;
   return (
     <main className="settings">
-      <p className="eyebrow">ANIME / SUBTITLE / SETTINGS</p>
-      <h1>편안한 감상을 위한 설정</h1>
-      <p>번역 서버와 자막 검색 서비스를 연결하세요.</p>
+      <h1>설정</h1>
+      <section>
+        <h2>자막 실행</h2>
+        <div className="row">
+          <label className="mode">
+            <input
+              name="subtitleMode"
+              type="radio"
+              checked={s.mode === 'auto'}
+              onChange={() => setS({ ...s, mode: 'auto' })}
+            />
+            자동
+          </label>
+          <label className="mode">
+            <input
+              name="subtitleMode"
+              type="radio"
+              checked={s.mode !== 'auto'}
+              onChange={() => setS({ ...s, mode: 'ko' })}
+            />
+            수동
+          </label>
+        </div>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={s.autoApply}
+            onChange={(e) => setS({ ...s, autoApply: e.target.checked })}
+          />
+          작품·회차 선택 시 자동 적용
+        </label>
+        <p className="muted">
+          자동은 자막 검색과 번역을 바로 시작합니다. 수동을 선택하면 팝업에서 사용할 경로를 직접
+          실행합니다.
+        </p>
+      </section>
+      <section>
+        <h2>초기 접근 설정</h2>
+        <p className="muted">
+          {personal
+            ? '개인용 빌드: 설치 시 모든 웹사이트 접근을 승인합니다. 영상·자막 처리 중 추가 승인창을 요청하지 않습니다.'
+            : '공개용 빌드: 지원 사이트·확인된 플레이어·자막 소스의 접근은 설치 권한에 포함됩니다. 다른 외부 도메인은 여기서 한 번 등록하세요.'}
+        </p>
+        {!personal && (
+          <>
+            <label>
+              추가 배포·플레이어 도메인
+              <input
+                type="url"
+                value={extraHost}
+                onChange={(e) => setExtraHost(e.target.value)}
+                placeholder="https://example.com"
+              />
+            </label>
+            <button
+              className="secondary"
+              disabled={busy || !extraHost.trim()}
+              onClick={() =>
+                void action(async () => {
+                  await requestHost(extraHost.trim());
+                  setMessage('외부 도메인의 접근 설정을 저장했습니다.');
+                })
+              }
+            >
+              초기 접근 등록
+            </button>
+          </>
+        )}
+        <button
+          className="text-button"
+          onClick={() =>
+            chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id })
+          }
+        >
+          Chrome 사이트 접근 설정
+        </button>
+      </section>
       <section>
         <div className="section-title">
           <span className="number">01</span>
@@ -262,7 +338,7 @@ function SettingsPage() {
             textShadow: '0 0 ' + s.display.outline + 'px black',
           }}
         >
-          한국어로 이어지는 이야기
+          자막 표시 미리보기
         </div>
       </section>
       {error && (

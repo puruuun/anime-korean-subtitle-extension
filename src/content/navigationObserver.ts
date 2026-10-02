@@ -16,7 +16,7 @@ export function observeNavigation(callback: () => void) {
   });
   window.addEventListener('popstate', check);
   window.addEventListener('animesub:navigation', check);
-  const interval = setInterval(check, 1000);
+  const interval = setInterval(check, 400);
   return () => {
     observer.disconnect();
     clearInterval(interval);

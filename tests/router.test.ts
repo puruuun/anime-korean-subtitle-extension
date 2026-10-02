@@ -58,6 +58,7 @@ vi.mock('../src/anime/AnimeResolver', () => ({
 vi.mock('../src/storage/offsets', () => ({ getOffset: async () => 0 }));
 vi.mock('../src/background/frameManager', () => ({
   applyCues: harness.apply,
+  injectFrames: async () => {},
   clearFrames: harness.clear,
   collectSubtitles: async () => [],
   videoFrames: async () => [{ frameId: 7, documentId: 'player-document' }],
@@ -122,7 +123,13 @@ beforeEach(() => {
     webNavigation: { getAllFrames: async () => [{ frameId: 7 }] },
     storage: {
       session: {
-        get: async (key: string) => ({ [key]: structuredClone(storage.get(key)) }),
+        get: async (keys: string | string[]) =>
+          Object.fromEntries(
+            (Array.isArray(keys) ? keys : [keys]).map((key) => [
+              key,
+              structuredClone(storage.get(key)),
+            ]),
+          ),
         set: async (values: Record<string, unknown>) => {
           for (const [key, value] of Object.entries(values))
             storage.set(key, structuredClone(value));
@@ -247,5 +254,68 @@ describe('progressive job lifecycle', () => {
     expect(storage.has('job:9')).toBe(false);
     expect(storage.has('render:9')).toBe(false);
     expect(await router.currentStatus(9)).toBeUndefined();
+  });
+});
+
+describe('AUTO episode routing and recovery', () => {
+  it('deduplicates the same episode and aborts its core when a new episode arrives', async () => {
+    const router = await import('../src/background/messageRouter');
+    await Promise.all([router.episodeReady(9, context), router.episodeReady(9, context)]);
+    await vi.waitFor(() => expect(harness.cores).toHaveLength(1));
+    const first = harness.cores[0];
+    const next = { ...context, episode: 2, pageUrl: context.pageUrl.replace('ep=1', 'ep=2') };
+    tabGet.mockResolvedValue({ id: 9, url: next.pageUrl });
+    await router.episodeNavigating(9);
+    expect(first.signal.aborted).toBe(true);
+    first.finish(cues);
+    await router.episodeReady(9, next);
+    await vi.waitFor(() => expect(harness.cores).toHaveLength(2));
+    expect((await router.currentStatus(9))?.context.episode).toBe(2);
+    await router.cancelJob(9);
+    harness.cores[1].finish(cues);
+  });
+  it('does not overwrite manually corrected season metadata during initial DOM settling', async () => {
+    const router = await import('../src/background/messageRouter');
+    await router.startJob(9, 'ko', { ...context, season: 2 });
+    await vi.waitFor(() => expect(harness.cores).toHaveLength(1));
+    await router.episodeReady(9, context);
+    expect(harness.cores[0].signal.aborted).toBe(false);
+    expect((await router.currentStatus(9))?.context.season).toBe(2);
+    await router.cancelJob(9);
+    harness.cores[0].finish(cues);
+  });
+  it('resumes an unfinished automatic episode after a service worker restart', async () => {
+    storage.set('automatic:9', {
+      key: 'miruro:router:1:1:tv',
+      context,
+      startedAt: Date.now(),
+      deadlineAt: Date.now() + 120000,
+      attempt: 1,
+    });
+    storage.set('job:9', { stage: 'translate', busy: true });
+    const router = await import('../src/background/messageRouter');
+    await router.ensureAutomaticJob(9);
+    await vi.waitFor(() => expect(harness.cores).toHaveLength(1));
+    expect((await router.currentStatus(9))?.busy).toBe(true);
+    await router.cancelJob(9);
+    harness.cores[0].finish(cues);
+  });
+  it('never resumes a completed or stopped episode from a heartbeat', async () => {
+    const automatic = {
+      key: 'miruro:router:1:1:tv',
+      context,
+      startedAt: Date.now(),
+      deadlineAt: Date.now() + 120000,
+      attempt: 1,
+    };
+    storage.set('automatic:9', automatic);
+    storage.set('job:9', { stage: 'done', busy: false });
+    const router = await import('../src/background/messageRouter');
+    await router.ensureAutomaticJob(9);
+    expect(harness.cores).toHaveLength(0);
+    storage.set('automatic:9', { ...automatic, stopped: true });
+    storage.set('job:9', { stage: 'error', busy: false });
+    await router.ensureAutomaticJob(9);
+    expect(harness.cores).toHaveLength(0);
   });
 });

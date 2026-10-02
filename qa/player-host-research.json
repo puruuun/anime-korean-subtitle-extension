@@ -1,0 +1,172 @@
+{
+  "checkedAt": "2026-10-01T19:03:38.893Z",
+  "mediaBlocked": true,
+  "pages": [
+    {
+      "requested": "https://www.miruro.to/watch/qFe2jyMO-z1LwHyLlLpGyRUbWSg0g55W/seihantai-na-kimi-to-boku-2nd-season?ep=12",
+      "title": "Watch You and I Are Polar Opposites Season 2 · Miruro",
+      "frames": [
+        {
+          "url": "https://www.miruro.to/watch/qFe2jyMO-z1LwHyLlLpGyRUbWSg0g55W/seihantai-na-kimi-to-boku-2nd-season?ep=12",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [
+            {
+              "src": "https://theanimecommunity.com/embed-widget",
+              "title": "Anime Community Comment Section"
+            },
+            {
+              "src": "",
+              "title": ""
+            }
+          ],
+          "tracks": []
+        },
+        {
+          "url": "about:blank",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [],
+          "tracks": []
+        },
+        {
+          "url": "chrome-error://chromewebdata/",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [],
+          "tracks": []
+        },
+        {
+          "url": "https://strm.cx/?embed=1",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [],
+          "tracks": []
+        }
+      ],
+      "requestOrigins": [
+        "https://www.miruro.to",
+        "https://theanimecommunity.com",
+        "https://strm.cx"
+      ]
+    },
+    {
+      "requested": "https://www.miruro.to/watch/VBWQSDahmg3SGluIweSC89lZGVWtjM-6/reincarnated-as-a-sword-season-2?ep=1",
+      "title": "Watch Reincarnated as a Sword Season 2 · Miruro",
+      "frames": [
+        {
+          "url": "https://www.miruro.to/watch/VBWQSDahmg3SGluIweSC89lZGVWtjM-6/reincarnated-as-a-sword-season-2?ep=1",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [
+            {
+              "src": "https://theanimecommunity.com/embed-widget",
+              "title": "Anime Community Comment Section"
+            }
+          ],
+          "tracks": []
+        },
+        {
+          "url": "chrome-error://chromewebdata/",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [],
+          "tracks": []
+        },
+        {
+          "url": "https://strm.cx/?embed=1",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [],
+          "tracks": []
+        }
+      ],
+      "requestOrigins": [
+        "https://www.miruro.to",
+        "https://theanimecommunity.com",
+        "https://strm.cx"
+      ]
+    },
+    {
+      "requested": "https://reanime.to/watch/naruto-bjfend?ep=1&lang=sub",
+      "title": "Naruto - Episode 1 | Re:ANIME",
+      "frames": [
+        {
+          "url": "https://reanime.to/watch/naruto-bjfend?ep=1&lang=sub",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [
+            {
+              "src": "https://flixcloud.cc/e/bo2qdw3m3kjf?v=1&autoPlay=true&skI=false&skO=false&project_r_ts=1790881408995",
+              "title": "Episode 1 - Naruto"
+            },
+            {
+              "src": "",
+              "title": ""
+            }
+          ],
+          "tracks": []
+        },
+        {
+          "url": "about:blank",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [],
+          "tracks": []
+        },
+        {
+          "url": "https://flixcloud.cc/e/bo2qdw3m3kjf?v=1&autoPlay=true&skI=false&skO=false&project_r_ts=1790881408995",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [
+            {
+              "src": "",
+              "title": ""
+            }
+          ],
+          "tracks": []
+        },
+        {
+          "url": "about:blank",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [],
+          "tracks": []
+        }
+      ],
+      "requestOrigins": [
+        "https://reanime.to",
+        "https://flixcloud.cc"
+      ]
+    },
+    {
+      "requested": "https://reanime.to/watch/naruto-bjfend?ep=2&lang=sub",
+      "title": "Naruto - Episode 2 | Re:ANIME",
+      "frames": [
+        {
+          "url": "https://reanime.to/watch/naruto-bjfend?ep=2&lang=sub",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [
+            {
+              "src": "https://flixcloud.cc/e/zj4i944olkig?v=1&autoPlay=true&skI=false&skO=false&project_r_ts=1790881414719",
+              "title": "Episode 2 - Naruto"
+            }
+          ],
+          "tracks": []
+        },
+        {
+          "url": "https://flixcloud.cc/e/zj4i944olkig?v=1&autoPlay=true&skI=false&skO=false&project_r_ts=1790881414719",
+          "videoCount": 0,
+          "videoSources": [],
+          "iframes": [],
+          "tracks": []
+        }
+      ],
+      "requestOrigins": [
+        "https://reanime.to",
+        "https://flixcloud.cc"
+      ]
+    }
+  ]
+}

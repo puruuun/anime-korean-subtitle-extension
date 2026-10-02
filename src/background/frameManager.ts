@@ -1,4 +1,3 @@
-import { registerPlayerScripts } from './playerScripts';
 import type { SubtitleSource } from '../sites/types';
 import type { SubtitleCue } from '../subtitle/SubtitleCue';
 import type { DisplaySettings } from '../subtitle/SubtitleRenderer';
@@ -10,6 +9,7 @@ export interface FrameInfo {
   hasVideo?: boolean;
   area?: number;
   documentId?: string;
+  playerRevision?: number;
 }
 const available = new Map<number, Map<number, FrameInfo>>();
 export function supportedSite(url?: string) {
@@ -27,6 +27,7 @@ export async function recordFrame(
   sender: chrome.runtime.MessageSender,
   hasVideo: boolean,
   area: number,
+  playerRevision?: number,
 ) {
   const tabId = sender.tab?.id;
   if (tabId === undefined || sender.frameId === undefined || !(await supportedTab(tabId)))
@@ -34,7 +35,11 @@ export async function recordFrame(
   let frames = available.get(tabId);
   if (!frames) available.set(tabId, (frames = new Map()));
   const previous = frames.get(sender.frameId);
-  const changed = hasVideo && (!previous?.hasVideo || previous.documentId !== sender.documentId);
+  const changed =
+    hasVideo &&
+    (!previous?.hasVideo ||
+      previous.documentId !== sender.documentId ||
+      previous.playerRevision !== playerRevision);
   frames.set(sender.frameId, {
     frameId: sender.frameId,
     parentFrameId: -1,
@@ -42,13 +47,15 @@ export async function recordFrame(
     hasVideo,
     area: Math.min(area, 100000000),
     documentId: sender.documentId,
+    playerRevision,
   });
   return changed;
 }
 export async function frameInventory(tabId: number): Promise<FrameInfo[]> {
   if (!(await supportedTab(tabId)))
     throw new AppError('SITE', '지원 사이트 영상 페이지에서 사용하세요.');
-  return (await chrome.webNavigation.getAllFrames({ tabId })) ?? [];
+  const frames = (await chrome.webNavigation.getAllFrames({ tabId })) ?? [];
+  return frames.map((frame) => ({ ...available.get(tabId)?.get(frame.frameId), ...frame }));
 }
 export async function videoFrames(tabId: number) {
   const inventory = await frameInventory(tabId);
@@ -96,7 +103,7 @@ export async function applyCues(
   if (!frames.length)
     throw new AppError(
       'VIDEO',
-      '영상 요소를 찾지 못했습니다. 재생을 시작하고 플레이어 iframe 접근을 허용하세요.',
+      '영상 요소를 찾지 못했습니다. 플레이어 준비와 사이트 서버 상태를 확인하세요.',
     );
   const results = await Promise.allSettled(
     frames.map((f) =>
@@ -150,7 +157,6 @@ export async function injectFrame(tabId: number, frameId: number) {
 }
 export async function injectFrames(tabId: number) {
   const frames = await frameInventory(tabId);
-  await registerPlayerScripts(frames);
   await Promise.allSettled(
     frames.filter((f) => f.frameId !== 0).map((f) => injectFrame(tabId, f.frameId)),
   );

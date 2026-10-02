@@ -4,7 +4,7 @@ import type { AnimeContext } from '../../anime/AnimeContext';
 import type { JobStatus } from '../../background/messageRouter';
 import type { Mode } from '../../subtitle/SubtitleCore';
 import type { TranslationBufferStatus } from '../../translation/TranslationQueue';
-import { send, originPattern } from '../api';
+import { send } from '../api';
 import '../style.css';
 const modes: { id: Mode; name: string; detail: string }[] = [
   { id: 'ko', name: '한국어 자막 검색', detail: '외부 한국어 자막을 그대로 적용' },
@@ -68,11 +68,33 @@ function TranslationStatus({
       <small>번역 완료 시각은 현재 위치부터 연속으로 준비된 구간입니다.</small>
       {translation.failedChunks > 0 && (
         <small className="error">
-          {translation.failedChunks}개 Chunk 번역 실패 · 완료된 자막은 계속 표시됩니다. 다시
-          적용하면 실패한 구간을 다시 번역합니다.
+          {translation.failedChunks}개 Chunk 번역 실패 · 완료된 자막은 계속 표시됩니다. 번역을
+          재시작하면 실패한 구간을 다시 번역합니다.
         </small>
       )}
     </div>
+  );
+}
+function stageLabel(stage: string | undefined, mode: Mode) {
+  return (
+    (
+      {
+        context: '작품 정보 확인 중',
+        search: '자막 찾는 중',
+        download: '다운로드·해석 중',
+        source: '자막 적용 중',
+        extract: '영어 자막 읽는 중',
+        translate: '한국어 번역 중',
+        retry: '자동 재시도 대기',
+        'waiting-player': '플레이어 준비 대기',
+        done: '한국어 자막 준비 완료',
+        partial: '일부 번역 미완료',
+        error: '작업 확인 필요',
+        select: '수동 후보 확인',
+        manual: '수동 모드',
+        interrupted: '작업 복구 필요',
+      } as Record<string, string>
+    )[stage ?? ''] ?? (mode === 'auto' ? '회차 자동 감지 대기' : '수동 모드')
   );
 }
 function Popup() {
@@ -85,7 +107,7 @@ function Popup() {
   const [title, setTitle] = useState('');
   const [episode, setEpisode] = useState('');
   const [season, setSeason] = useState('');
-  const [origins, setOrigins] = useState<string[]>([]);
+  const [missingOrigins, setMissingOrigins] = useState<string[]>([]);
   const [working, setWorking] = useState(false);
   const [offset, setOffset] = useState(0);
   function acceptContext(c: AnimeContext) {
@@ -97,6 +119,12 @@ function Popup() {
   async function refresh(id: number) {
     const r = await send<{ status?: JobStatus }>({ type: 'GET_STATUS', tabId: id });
     setStatus(r.status);
+    const preferences = await send<{ mode: Mode }>({ type: 'GET_PREFERENCES' });
+    setMode(preferences.mode);
+    const access = await send<{ missing: string[] }>({ type: 'ACCESS_STATUS', tabId: id }).catch(
+      () => ({ missing: [] }),
+    );
+    setMissingOrigins(access.missing);
     if (r.status) {
       setOffset(r.status.offset ?? 0);
       if (r.status.context) setContext(r.status.context);
@@ -117,7 +145,7 @@ function Popup() {
           .catch(() => null);
         if (contextResult?.ok) acceptContext(contextResult.context);
         else {
-          setEdit(true);
+          setEdit(preferences.mode !== 'auto');
           setContext({
             site: (t.url ?? '').includes('reanime.to') ? 'reanime' : 'miruro',
             title: '',
@@ -125,33 +153,11 @@ function Popup() {
             pageUrl: t.url ?? '',
           });
           setError(
-            contextResult?.error ?? 'Miruro 또는 Re:ANIME 영상 페이지를 열고 새로고침하세요.',
+            contextResult?.error ??
+              '영상 페이지를 새로고침하세요. 연결되지 않으면 Chrome 확장 세부정보의 사이트 접근을 확인하세요.',
           );
         }
         await refresh(t.id);
-        const frames = await send<{ frames: { url: string; frameId: number }[] }>({
-          type: 'FRAME_INVENTORY',
-          tabId: t.id,
-        });
-        setOrigins([
-          ...new Set(
-            frames.frames
-              .filter((f) => f.frameId !== 0)
-              .map((f) => {
-                try {
-                  return originPattern(f.url);
-                } catch {
-                  return undefined;
-                }
-              })
-              .filter((x): x is string => !!x),
-          ),
-        ]);
-        const subtitleOrigins = await send<{ origins: string[] }>({
-          type: 'SOURCE_ORIGINS',
-          tabId: t.id,
-        }).catch(() => ({ origins: [] }));
-        setOrigins((existing) => [...new Set([...existing, ...subtitleOrigins.origins])]);
         timer = setInterval(() => {
           if (!stopped) void refresh(t.id!).catch(() => {});
         }, 1000);
@@ -204,6 +210,7 @@ function Popup() {
         mode,
         context: edited,
         selectedId,
+        refresh: !status?.translation?.failedChunks,
       });
       setStatus(r.status);
       if (edited) acceptContext(edited);
@@ -222,266 +229,309 @@ function Popup() {
       setError((e as Error).message);
     }
   }
+  async function changeMode(next: Mode) {
+    setMode(next);
+    setError('');
+    try {
+      await send({ type: 'SET_MODE', mode: next });
+      if (tabId !== undefined) await refresh(tabId);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   const busy = working || !!status?.busy;
   return (
     <main className="popup">
-      <div className="row">
-        <p className="eyebrow">ANIME / SUBTITLE</p>
-        <button
-          className="icon"
-          onClick={() => chrome.runtime.openOptionsPage()}
-          aria-label="설정 열기"
+      <section className="work-status" role="status" aria-live="polite" aria-label="현재 작업 상태">
+        <div className="row work-heading">
+          <strong>자막: {mode === 'auto' ? '자동' : '수동'}</strong>
+          <button
+            className="text-button"
+            onClick={() => void changeMode(mode === 'auto' ? 'ko' : 'auto')}
+          >
+            {mode === 'auto' ? '수동 전환' : '자동 전환'}
+          </button>
+          <button
+            className="icon"
+            onClick={() => chrome.runtime.openOptionsPage()}
+            aria-label="설정 열기"
+          >
+            설정
+          </button>
+        </div>
+        <p className="current-episode">
+          {context?.title || '영상 페이지를 기다리고 있습니다.'}
+          {context?.episode ? ' · EP ' + context.episode : ''}
+        </p>
+        <p
+          className={
+            'work-stage ' +
+            (status?.stage === 'error' || error || missingOrigins.length ? 'error' : '')
+          }
         >
-          ⚙ 설정
-        </button>
-      </div>
-      <h1>한국어로 이어지는 이야기</h1>
-      <section className="anime">
+          <span className="status-dot" />
+          {stageLabel(status?.stage, mode)}
+        </p>
+        <p className="work-message">
+          {error ||
+            (missingOrigins.length
+              ? '사이트 접근이 차단되었습니다. Chrome 확장 세부정보에서 사이트 접근을 허용한 뒤 새로고침하세요.'
+              : status?.message) ||
+            (mode === 'auto'
+              ? '회차를 선택하면 자막을 자동으로 준비합니다.'
+              : '사용할 자막 경로를 선택하세요.')}
+        </p>
+        {status?.path && (
+          <small className="work-source">
+            Source: {status.path}
+            {status.cached ? ' · 캐시' : ''}
+          </small>
+        )}
+        {status?.retry?.nextAt && (
+          <small className="retry-countdown">
+            {Math.max(0, Math.ceil((status.retry.nextAt - Date.now()) / 1000))}초 후 재시도 · 시도{' '}
+            {status.retry.attempt}/{status.retry.maxAttempts}
+          </small>
+        )}
+        {status?.retry?.reason && <small className="retry-reason">{status.retry.reason}</small>}
+        {status?.warnings?.map((warning, i) => (
+          <small className="error" key={i}>
+            {warning}
+          </small>
+        ))}
+        {missingOrigins.length > 0 && (
+          <button
+            className="text-button"
+            onClick={() =>
+              chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id })
+            }
+          >
+            Chrome 권한 설정 열기
+          </button>
+        )}
+        {status?.progress && <progress value={status.progress.done} max={status.progress.total} />}
+        {status?.translation ? (
+          <TranslationStatus translation={status.translation} busy={!!status.busy} />
+        ) : (
+          <dl className="work-metrics">
+            <div>
+              <dt>현재 재생</dt>
+              <dd>{clockTime(status?.playbackTime ?? 0)}</dd>
+            </div>
+            <div>
+              <dt>작업 경과</dt>
+              <dd>{clockTime(status?.startedAt ? (Date.now() - status.startedAt) / 1000 : 0)}</dd>
+            </div>
+          </dl>
+        )}
+      </section>
+      <div className="popup-body">
+        <section className="anime">
+          <div className="row">
+            <span className="badge">{context?.site === 'reanime' ? 'Re:ANIME' : 'Miruro'}</span>
+            <button
+              className="text-button"
+              onClick={() => {
+                if (!edit && context) {
+                  setTitle(context.title);
+                  setEpisode(String(context.episode));
+                  setSeason(context.season ? String(context.season) : '');
+                }
+                setEdit(!edit);
+              }}
+            >
+              {edit ? '정보 접기' : '정보 수정'}
+            </button>
+          </div>
+          {edit ? (
+            <>
+              <label>
+                작품명
+                <input value={title} onChange={(e) => setTitle(e.target.value)} />
+              </label>
+              <div className="row">
+                <label>
+                  시즌 (선택)
+                  <input
+                    type="number"
+                    min="1"
+                    value={season}
+                    onChange={(e) => setSeason(e.target.value)}
+                  />
+                </label>
+                <label>
+                  회차
+                  <input
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    value={episode}
+                    onChange={(e) => setEpisode(e.target.value)}
+                  />
+                </label>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2>{context?.title || '작품 정보 인식 중...'}</h2>
+              <p>
+                Episode {context?.episode || '—'}
+                {context?.season ? ' · Season ' + context.season : ''}
+              </p>
+            </>
+          )}
+        </section>
+        <p className="label-heading">한국어 자막</p>
         <div className="row">
-          <span className="badge">{context?.site === 'reanime' ? 'Re:ANIME' : 'Miruro'}</span>
+          {(
+            [
+              { id: 'auto', name: '자동' },
+              { id: 'manual', name: '수동' },
+            ] as const
+          ).map((option) => (
+            <label className="mode" key={option.id}>
+              <input
+                name="selection"
+                type="radio"
+                checked={option.id === 'auto' ? mode === 'auto' : mode !== 'auto'}
+                onChange={() => {
+                  const next = option.id === 'auto' ? 'auto' : 'ko';
+                  void changeMode(next);
+                }}
+              />
+              <strong>{option.name}</strong>
+            </label>
+          ))}
+        </div>
+        {mode !== 'auto' &&
+          modes.map((m) => (
+            <label className="mode" key={m.id}>
+              <input
+                name="mode"
+                type="radio"
+                checked={mode === m.id}
+                disabled={busy}
+                onChange={() => {
+                  void changeMode(m.id);
+                }}
+              />
+              <span>
+                <strong>{m.name}</strong>
+                <small>{m.detail}</small>
+              </span>
+            </label>
+          ))}
+        <button
+          className="secondary full"
+          disabled={busy || !context?.title || !context?.episode}
+          onClick={() => void run()}
+        >
+          {mode !== 'auto'
+            ? '수동 자막 실행'
+            : status?.translation?.failedChunks
+              ? '번역 재시작'
+              : '다시 검색'}
+        </button>
+        {status?.stage === 'select' &&
+          status.results?.map((r) => (
+            <div className="result subtitle-candidate" key={r.id}>
+              <strong>{r.release || r.title}</strong>
+              <br />
+              {r.providerId} · {r.language.toUpperCase()} ·{' '}
+              {r.episode === undefined ? '회차 미확인' : 'EP ' + r.episode} · Score {r.score}
+              <br />
+              <small>{r.reasons?.join(' · ')}</small>
+              {r.updatedAt && (
+                <small className="candidate-updated">
+                  업데이트 {r.updatedAt.replace('T', ' ')}
+                </small>
+              )}
+              {r.listedEpisode && r.listedEpisode !== String(r.episode) && (
+                <small>
+                  제작자 최신 등록 회차 · {r.listedEpisode} (파일 회차를 별도로 확인합니다)
+                </small>
+              )}
+              {r.linkMessage && <p>{r.linkMessage}</p>}
+              <div className="candidate-actions">
+                <button
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        await run(r.id);
+                      } catch (e) {
+                        setError((e as Error).message);
+                      }
+                    })();
+                  }}
+                >
+                  이 자막 다시 확인
+                </button>
+                {r.pageUrl && (
+                  <a href={r.pageUrl} target="_blank" rel="noreferrer">
+                    배포 페이지 열기 ↗
+                  </a>
+                )}
+              </div>
+            </div>
+          ))}
+        <section className="sync">
+          <div className="row">
+            <strong>자막 싱크</strong>
+            <span className="muted">
+              {offset > 0 ? '+' : ''}
+              {offset.toFixed(1)}s
+            </span>
+          </div>
+          <div className="toolbar">
+            <button
+              className="secondary"
+              onClick={() => void adjust(offset - 0.5)}
+              disabled={!status}
+            >
+              −0.5s
+            </button>
+            <button className="secondary" onClick={() => void adjust(0)} disabled={!status}>
+              Reset
+            </button>
+            <button
+              className="secondary"
+              onClick={() => void adjust(offset + 0.5)}
+              disabled={!status}
+            >
+              +0.5s
+            </button>
+          </div>
+          <small>양수 값은 자막을 앞당깁니다. 회차별로 저장됩니다.</small>
+        </section>
+        <div className="toolbar">
           <button
             className="text-button"
             onClick={() => {
-              if (!edit && context) {
-                setTitle(context.title);
-                setEpisode(String(context.episode));
-                setSeason(context.season ? String(context.season) : '');
-              }
-              setEdit(!edit);
+              void send({ type: 'CANCEL', tabId }).then(
+                () => {
+                  setStatus(undefined);
+                },
+                (e) => setError(e.message),
+              );
             }}
           >
-            {edit ? '정보 접기' : '정보 수정'}
-          </button>
-        </div>
-        {edit ? (
-          <>
-            <label>
-              작품명
-              <input value={title} onChange={(e) => setTitle(e.target.value)} />
-            </label>
-            <div className="row">
-              <label>
-                시즌 (선택)
-                <input
-                  type="number"
-                  min="1"
-                  value={season}
-                  onChange={(e) => setSeason(e.target.value)}
-                />
-              </label>
-              <label>
-                회차
-                <input
-                  type="number"
-                  min="0.1"
-                  step="0.1"
-                  value={episode}
-                  onChange={(e) => setEpisode(e.target.value)}
-                />
-              </label>
-            </div>
-          </>
-        ) : (
-          <>
-            <h2>{context?.title || '작품 정보 인식 중...'}</h2>
-            <p>
-              Episode {context?.episode || '—'}
-              {context?.season ? ' · Season ' + context.season : ''}
-            </p>
-          </>
-        )}
-      </section>
-      <p className="label-heading">한국어 자막</p>
-      <div className="row">
-        {(
-          [
-            { id: 'auto', name: '자동' },
-            { id: 'manual', name: '수동' },
-          ] as const
-        ).map((option) => (
-          <label className="mode" key={option.id}>
-            <input
-              name="selection"
-              type="radio"
-              disabled={busy}
-              checked={option.id === 'auto' ? mode === 'auto' : mode !== 'auto'}
-              onChange={() => {
-                const next = option.id === 'auto' ? 'auto' : 'ko';
-                setMode(next);
-                void send({ type: 'SET_MODE', mode: next }).catch((e) => setError(e.message));
-              }}
-            />
-            <strong>{option.name}</strong>
-          </label>
-        ))}
-      </div>
-      {mode !== 'auto' &&
-        modes.map((m) => (
-          <label className="mode" key={m.id}>
-            <input
-              name="mode"
-              type="radio"
-              checked={mode === m.id}
-              disabled={busy}
-              onChange={() => {
-                setMode(m.id);
-                void send({ type: 'SET_MODE', mode: m.id }).catch((e) => setError(e.message));
-              }}
-            />
-            <span>
-              <strong>{m.name}</strong>
-              <small>{m.detail}</small>
-            </span>
-          </label>
-        ))}
-      <button className="primary full" disabled={busy || !context} onClick={() => void run()}>
-        한국어 자막 적용
-      </button>
-      <div
-        className={'status ' + (status?.stage === 'error' ? 'error' : '')}
-        role="status"
-        aria-live="polite"
-      >
-        <span className="status-dot" />
-        {status?.message ||
-          '자막: ' +
-            (mode === 'auto' ? '자동 · 회차를 열면 준비합니다.' : '수동 · 자막을 적용하세요.')}
-        {status?.path && <small>현재 경로 · {status.path}</small>}
-        {status?.progress && <progress value={status.progress.done} max={status.progress.total} />}
-        {status?.translation && (
-          <TranslationStatus translation={status.translation} busy={!!status.busy} />
-        )}
-      </div>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      {status?.stage === 'select' &&
-        status.results?.map((r) => (
-          <div className="result subtitle-candidate" key={r.id}>
-            <strong>{r.release || r.title}</strong>
-            <br />
-            {r.providerId} · {r.language.toUpperCase()} ·{' '}
-            {r.episode === undefined ? '회차 미확인' : 'EP ' + r.episode} · Score {r.score}
-            <br />
-            <small>{r.reasons?.join(' · ')}</small>
-            {r.updatedAt && (
-              <small className="candidate-updated">업데이트 {r.updatedAt.replace('T', ' ')}</small>
-            )}
-            {r.listedEpisode && r.listedEpisode !== String(r.episode) && (
-              <small>
-                제작자 최신 등록 회차 · {r.listedEpisode} (파일 회차를 별도로 확인합니다)
-              </small>
-            )}
-            {r.linkMessage && <p>{r.linkMessage}</p>}
-            <div className="candidate-actions">
-              <button
-                className="secondary"
-                disabled={busy}
-                onClick={() => {
-                  void (async () => {
-                    try {
-                      if (r.requiredOrigins?.length) {
-                        const allowed = await chrome.permissions.request({
-                          origins: r.requiredOrigins,
-                        });
-                        if (!allowed)
-                          throw Error(
-                            '자막 도메인의 접근 권한이 허용되지 않았습니다. 배포 페이지에서 확인하세요.',
-                          );
-                      }
-                      await run(r.id);
-                    } catch (e) {
-                      setError((e as Error).message);
-                    }
-                  })();
-                }}
-              >
-                {r.requiredOrigins?.length ? '접근 허용 후 적용' : '이 자막 적용'}
-              </button>
-              {r.pageUrl && (
-                <a href={r.pageUrl} target="_blank" rel="noreferrer">
-                  배포 페이지 열기 ↗
-                </a>
-              )}
-            </div>
-          </div>
-        ))}
-      <section className="sync">
-        <div className="row">
-          <strong>자막 싱크</strong>
-          <span className="muted">
-            {offset > 0 ? '+' : ''}
-            {offset.toFixed(1)}s
-          </span>
-        </div>
-        <div className="toolbar">
-          <button
-            className="secondary"
-            onClick={() => void adjust(offset - 0.5)}
-            disabled={!status}
-          >
-            −0.5s
-          </button>
-          <button className="secondary" onClick={() => void adjust(0)} disabled={!status}>
-            Reset
+            자막 끄기 / 취소
           </button>
           <button
-            className="secondary"
-            onClick={() => void adjust(offset + 0.5)}
-            disabled={!status}
+            className="text-button"
+            onClick={() => {
+              void chrome.tabs
+                .sendMessage(tabId!, { type: 'DEMO' })
+                .catch((e) => setError(e.message));
+            }}
           >
-            +0.5s
+            렌더러 테스트
           </button>
         </div>
-        <small>양수 값은 자막을 앞당깁니다. 회차별로 저장됩니다.</small>
-      </section>
-      {origins.length > 0 && (
-        <button
-          className="secondary full"
-          onClick={() => {
-            void (async () => {
-              try {
-                const allowed = await chrome.permissions.request({ origins });
-                if (!allowed) throw Error('iframe 접근 권한이 허용되지 않았습니다.');
-                await send({ type: 'INJECT_FRAMES', tabId });
-                setError('플레이어를 새로고침하면 초기 자막 API도 탐지됩니다.');
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            })();
-          }}
-        >
-          플레이어·자막 접근 허용
-        </button>
-      )}
-      <div className="toolbar">
-        <button
-          className="text-button"
-          onClick={() => {
-            void send({ type: 'CANCEL', tabId }).then(
-              () => {
-                setStatus(undefined);
-              },
-              (e) => setError(e.message),
-            );
-          }}
-        >
-          자막 끄기 / 취소
-        </button>
-        <button
-          className="text-button"
-          onClick={() => {
-            void chrome.tabs
-              .sendMessage(tabId!, { type: 'DEMO' })
-              .catch((e) => setError(e.message));
-          }}
-        >
-          렌더러 테스트
-        </button>
+        <p className="muted footer">다음 회차 자동 감지 · 실패 재시도 최대 2분</p>
       </div>
-      <p className="muted footer">텍스트 자막만 처리 · 다음 회차 자동 적용</p>
     </main>
   );
 }

@@ -1,6 +1,14 @@
 {
+  "version": "0.5.0",
   "passed": true,
-  "buildKeyBundles": ["dist/serviceWorker.js"],
-  "contentAndMainWorldContainKey": false,
-  "uiBundlesContainKey": false
+  "releaseBuildKeyIncluded": false,
+  "privateAndPublicScriptsIdentical": true,
+  "personalRequiredAllUrls": true,
+  "publicRequiredKnownHosts": true,
+  "activeTabRemoved": true,
+  "runtimeRequestLocations": [
+    "src/ui/api.ts initial setup only"
+  ],
+  "browserScenariosPassed": 86,
+  "unitTestsPassed": 180
 }
