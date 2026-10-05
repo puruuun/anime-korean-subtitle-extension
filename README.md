@@ -1,19 +1,45 @@
-# Anime Korean Subtitle v0.5.0
+# Anime Korean Subtitle v0.5.1
 
 Miruro / Re:ANIME의 현재 작품과 회차를 감지하고 한국어 자막을 준비하는 Chrome Manifest V3 확장프로그램입니다. 영상·오디오는 다운로드하거나 전사하지 않습니다.
 
 ## 다른 컴퓨터에 설치
 
-1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.5.0.zip`을 받습니다.
+1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.5.1.zip`을 받습니다.
 2. ZIP을 폴더에 압축 해제합니다. 그 폴더의 `extension/manifest.json`을 확인합니다.
 3. Chrome에서 `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
 4. **압축해제된 확장 프로그램 로드**를 눌러 `extension` 폴더를 선택합니다.
 5. 설정에서 **Local LLM** 또는 **Gemini API**를 연결합니다. 한국어 원본 자막에는 번역 서버가 필요 없습니다.
 6. Miruro / Re:ANIME 회차를 열거나 새로고침합니다. 회차 선택만으로 자막 검색·다운로드·번역·적용이 자동 실행됩니다.
 
-기본 ZIP은 **개인용** 빌드입니다. 설치 시 모든 웹사이트 접근 권한(`<all_urls>`)을 사용하며 재생 중 별도의 권한 창을 요청하지 않습니다. 제한된 권한이 필요하면 `anime-korean-subtitle-public-v0.5.0.zip`을 사용하세요. 공개용의 알려지지 않은 배포·플레이어·번역 서버는 재생 전에 설정의 초기 접근 설정에서 한 번 승인합니다. AUTO가 대신 권한 창을 띄우지 않습니다.
+기본 ZIP은 **개인용** 빌드입니다. 설치 시 모든 웹사이트 접근 권한(`<all_urls>`)을 사용하며 재생 중 별도의 권한 창을 요청하지 않습니다. 제한된 권한이 필요하면 `anime-korean-subtitle-public-v0.5.1.zip`을 사용하세요. 공개용의 알려지지 않은 배포·플레이어·번역 서버는 재생 전에 설정의 초기 접근 설정에서 한 번 승인합니다. AUTO가 대신 권한 창을 띄우지 않습니다.
 
 확장 폴더는 설치 후에도 삭제하지 마세요. 업데이트 때는 같은 폴더를 새 버전으로 바꾸고 확장 페이지에서 새로고침하세요. 로그인 정보·개인 API Key는 배포 ZIP에 포함하지 않습니다.
+
+## 처음 설치한 뒤 권한 설정
+
+설정의 **초기 접근 설정 → Chrome 사이트 접근 설정** 바로 아래에 따라할 수 있는 가이드를 넣었습니다.
+
+1. Chrome 확장 세부정보에서 확장 사용 스위치를 켭니다.
+2. **사이트 액세스 → 모든 사이트에서**를 선택합니다. ‘선택 시’는 탭마다 클릭이 필요하므로 AUTO에는 맞지 않습니다. 공개용의 ‘모든 사이트’는 선언된 지원 host 범위이며, 개인용은 모든 웹사이트를 허용합니다. 개별 허용 스위치가 표시되면 모두 켭니다.
+3. 이 프로그램 설정으로 돌아와 **자동**과 **작품·회차 선택 시 자동 적용**을 켜고 **설정 저장**을 누릅니다. 일본어·영어 번역을 사용하려면 번역 서버를 연결하고 연결 테스트를 진행합니다.
+4. 열려 있던 Miruro / Re:ANIME 영상 페이지를 새로고침하고 회차를 선택합니다. 팝업 상단 작업 상태창에서 진행을 확인합니다.
+
+시크릿 창을 사용할 때만 **시크릿 모드에서 허용**도 켜세요. 일반 웹 영상에는 파일 URL·마이크·카메라 권한이 필요하지 않습니다. [Chrome 공식 권한 안내](https://support.google.com/chrome/answer/2664769?hl=ko)도 설정에서 열 수 있습니다.
+
+## GitHub 업데이트 확인
+
+설정의 **프로그램 업데이트**에서 설치 버전과 최신 정식 Release를 비교합니다. 설정을 열면 확인하며, 성공 결과는 10분 동안 재사용합니다. **업데이트 확인** 버튼은 캐시를 건너뛰고 다시 조회합니다. **최신 버전 / 업데이트 필요 / 개발 버전 / 확인 실패**를 구분하며 인증·통신 실패를 최신 버전으로 표시하지 않습니다. 실패 결과는 1분간만 캐싱합니다. 같은 시점의 요청은 하나로 합치고 10초 안에 응답하지 않으면 중단합니다.
+
+현재 GitHub 저장소가 **비공개**이므로 업데이트 조회에는 해당 저장소에 접근할 수 있는 본인의 **Fine-grained 읽기 전용 토큰**이 필요합니다. Chrome의 GitHub 로그인만으로 API가 인증되지는 않습니다. 설정의 **비공개 저장소 연결**을 펼치면 생성 링크와 다음 절차가 있습니다.
+
+1. GitHub 토큰 생성 화면에서 이름·만료일을 정합니다.
+2. Resource owner `puruuun`, Only select repositories → `anime-korean-subtitle-extension`을 선택합니다. 목록에 없으면 계정의 저장소 접근 권한을 확인하세요.
+3. Repository permissions에서 **Contents: Read-only**를 선택합니다. Metadata 읽기는 자동 포함됩니다. 쓰기 권한은 필요 없습니다.
+4. 생성한 토큰을 입력하고 **연결하고 확인**을 누릅니다. 연결 해제로 토큰을 제거할 수 있습니다.
+
+토큰은 현재 Chrome 프로필의 확장 local storage에 별도로 저장하며 GitHub API에만 전송합니다. 웹페이지·Content Script 및 일반 설정 응답에 반환하지 않습니다. 저장소가 공개되면 토큰 없이 조회할 수 있습니다. [GitHub 토큰 안내](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens), [Release API 권한 문서](https://docs.github.com/en/rest/releases/releases#get-the-latest-release).
+
+새 버전이 있으면 Release 링크와 설치 방법을 표시합니다. 같은 빌드의 ZIP을 받고 기존 설치 폴더를 교체한 다음 Chrome 확장 페이지의 새로고침(↻)과 영상 새로고침을 진행합니다. 업데이트 파일을 자동 설치하는 기능은 아닙니다.
 
 ## 자동 / 수동
 
@@ -88,7 +114,7 @@ SRT / ASS / SSA / VTT를 지원합니다. `01`, `E01`, `EP01`, `Episode 01`, `S0
 
 API 요청은 service worker에서 수행합니다. local/session storage는 `TRUSTED_CONTEXTS`로 제한하며 페이지·Content Script에 API Key나 전체 설정을 전달하지 않습니다. MAIN bridge는 기존 공개 자막 응답을 읽기만 합니다. 자막 다운로드는 쿠키 없이 수행하고 크기를 제한합니다.
 
-개인용 빌드는 required `<all_urls>`이며 optional host와 `activeTab`을 사용하지 않습니다. 공개용 required host는 지원 사이트, 실제 확인된 `strm.cx` / `flixcloud.cc`, Anissia·Jimaku·미러·Gemini·localhost, Blogspot·티스토리·Google Drive입니다. 공개용에만 optional HTTP/HTTPS를 남겨 초기 설정에서 알려지지 않은 host를 승인할 수 있습니다. `chrome.permissions.request`는 초기 설정 helper에만 남아 있으며 AUTO와 팝업에는 없습니다. Chrome이 필수 접근을 차단하면 확장 세부정보를 안내하고 자동 권한 요청은 하지 않습니다. 자동 한국어 단계 전체 10초(수동 한국어는 30초), 각 일본어 Provider 전체 8초, 내장 영어 단계 전체 10초를 넘기면 다음 경로로 진행합니다. 번역 timeout은 별도 설정입니다.
+개인용 빌드는 required `<all_urls>`이며 optional host와 `activeTab`을 사용하지 않습니다. 공개용 required host는 지원 사이트, 실제 확인된 `strm.cx` / `flixcloud.cc`, Anissia·Jimaku·미러·Gemini·localhost, Blogspot·티스토리·Google Drive 및 업데이트 확인용 `api.github.com`입니다. 공개용에만 optional HTTP/HTTPS를 남겨 초기 설정에서 알려지지 않은 host를 승인할 수 있습니다. `chrome.permissions.request`는 초기 설정 helper에만 남아 있으며 AUTO와 팝업에는 없습니다. Chrome이 필수 접근을 차단하면 확장 세부정보를 안내하고 자동 권한 요청은 하지 않습니다. 자동 한국어 단계 전체 10초(수동 한국어는 30초), 각 일본어 Provider 전체 8초, 내장 영어 단계 전체 10초를 넘기면 다음 경로로 진행합니다. 번역 timeout은 별도 설정입니다.
 
 ## 개발 및 검증
 
@@ -102,6 +128,7 @@ npm run check
 npx playwright install chromium
 npm run test:browser
 npm run test:browser:auto
+npm run test:browser:settings
 npm run test:browser:progressive
 npm run test:browser:anissia
 npm run test:anissia:distribution
@@ -112,6 +139,6 @@ node scripts/verify-live-provider.mjs
 node scripts/research-live.mjs
 ```
 
-`dist/`는 Chrome에 로드할 결과물입니다. `npm run check`는 typecheck, unit tests, build를 실행합니다. 브라우저 회귀 검사는 격리된 실제 MV3 확장과 모의 서비스/번역 응답을 사용합니다. Anissia 배포 형태 검사는 실제 Blogspot·Drive·티스토리 파일을 사용하며 `qa/anissia-distribution-report.json` 및 `qa/anissia-distribution-browser-report.json`에 기록합니다. 다른 실제 서비스 확인은 `qa/services-report.json`, 실제 페이지에서 실행한 두 Adapter 결과는 `qa/live-site-research.json`에 기록합니다. 이번 권한/AUTO 개편의 상세 결과는 [qa/AUTO-UX-REPORT-v0.5.0.md](qa/AUTO-UX-REPORT-v0.5.0.md)를 참고하세요. 상세 검증 범위와 제한은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
+`dist/`는 Chrome에 로드할 결과물입니다. `npm run check`는 typecheck, unit tests, build를 실행합니다. 브라우저 회귀 검사는 격리된 실제 MV3 확장과 모의 서비스/번역 응답을 사용합니다. Anissia 배포 형태 검사는 실제 Blogspot·Drive·티스토리 파일을 사용하며 `qa/anissia-distribution-report.json` 및 `qa/anissia-distribution-browser-report.json`에 기록합니다. 다른 실제 서비스 확인은 `qa/services-report.json`, 실제 페이지에서 실행한 두 Adapter 결과는 `qa/live-site-research.json`에 기록합니다. 이번 권한/AUTO 개편의 상세 결과는 [qa/AUTO-UX-REPORT-v0.5.0.md](qa/AUTO-UX-REPORT-v0.5.0.md)를 참고하세요. 권한 가이드·업데이트 확인 기능의 v0.5.1 검증은 [qa/SETTINGS-UPDATE-REPORT-v0.5.1.md](qa/SETTINGS-UPDATE-REPORT-v0.5.1.md)를 참고하세요. 상세 검증 범위와 제한은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
 
 자막 렌더러, 회차별 싱크, fullscreen, seek와 progressive buffer UI는 유지됩니다. ASS는 시간·대사 중심으로 처리하며 고급 스타일을 보존하지 않습니다. HLS는 WebVTT subtitle segment만 읽습니다.

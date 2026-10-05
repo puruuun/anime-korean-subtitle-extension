@@ -1,0 +1,14 @@
+{
+  "version": "0.5.1",
+  "passed": true,
+  "releaseBuildKeyIncluded": false,
+  "testTokenIncluded": false,
+  "privateAndPublicScriptsIdentical": true,
+  "personalRequiredAllUrls": true,
+  "publicRequiredGitHubAPI": true,
+  "updateRuntimePermissionRequests": 0,
+  "unitTestsPassed": 212,
+  "settingsBrowserScenariosPassed": 46,
+  "autoBrowserScenariosPassed": 48,
+  "browserScenariosPassed": 94
+}

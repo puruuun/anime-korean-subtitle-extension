@@ -1,3 +1,4 @@
+import { checkUpdates, updateConnection, saveUpdateToken } from './updates';
 import {
   startJob,
   cancelJob,
@@ -96,6 +97,12 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
         await preferencesChanged();
         return { ok: true };
       }
+      case 'UPDATE_CONNECTION':
+        return { ok: true, ...(await updateConnection()) };
+      case 'CHECK_UPDATES':
+        return { ok: true, status: await checkUpdates(m.force === true) };
+      case 'SAVE_UPDATE_TOKEN':
+        return { ok: true, ...(await saveUpdateToken(m.token)) };
       case 'GET_SETTINGS':
         return { ok: true, settings: await getSettings() };
       case 'SAVE_SETTINGS': {

@@ -12,6 +12,7 @@ describe('install-time permission profiles', () => {
   it('limits public builds and loads both worlds automatically in verified player frames', () => {
     const m = buildManifest(base, 'public');
     expect(m.host_permissions).not.toContain('<all_urls>');
+    expect(m.host_permissions).toContain('https://api.github.com/*');
     for (const host of ['https://flixcloud.cc/*', 'https://strm.cx/*']) {
       expect(m.host_permissions).toContain(host);
       for (const script of m.content_scripts) {

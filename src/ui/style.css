@@ -411,6 +411,87 @@ a {
 }
 .settings a {
   font-size: 12px;
+  color: #c0b2ff;
+}
+.permission-guide {
+  border-top: 1px solid #38394c;
+  margin-top: 16px;
+  padding-top: 18px;
+}
+.permission-guide ol,
+.extension-updates ol {
+  padding-left: 22px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.permission-guide li,
+.extension-updates li {
+  margin: 10px 0;
+}
+.permission-guide p,
+.extension-updates p {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.permission-guide li p {
+  margin: 5px 0;
+}
+.guide-note {
+  padding: 14px;
+  margin: 16px 0;
+  background: #242333;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.guide-note p {
+  margin: 6px 0 0;
+}
+.update-status {
+  background: #242333;
+  padding: 16px;
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+}
+.update-status p {
+  margin: 8px 0 14px;
+}
+.update-versions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+.update-versions dt {
+  color: #aaa8bf;
+  font-size: 12px;
+}
+.update-versions dd {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}
+.update-actions .secondary {
+  margin-left: 0;
+}
+.update-connection {
+  border-top: 1px solid #38394c;
+  margin-top: 20px;
+  padding-top: 16px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.update-connection summary {
+  cursor: pointer;
+  color: #d7d0ef;
+  line-height: 1.7;
 }
 .settings-actions {
   position: sticky;

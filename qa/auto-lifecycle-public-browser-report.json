@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-01T19:36:31.113Z",
+  "checkedAt": "2026-10-05T07:24:24.937Z",
   "passed": 24,
   "tests": [
     "Fresh install has AUTO + autoApply + required install-time access (public); no activeTab",
@@ -30,23 +30,23 @@
   "timings": [
     {
       "case": "Korean episode revisit",
-      "elapsedMs": 924,
+      "elapsedMs": 776,
       "networkSearches": 0
     },
     {
       "case": "Translated episode revisit",
-      "elapsedMs": 960,
+      "elapsedMs": 556,
       "networkSearches": 0,
       "llmCalls": 0
     },
     {
       "case": "Transient 503 → automatic retry",
-      "elapsedMs": 4023,
+      "elapsedMs": 3703,
       "initialDelayMs": 3000
     },
     {
       "case": "Hydrated player readiness",
-      "elapsedMs": 173
+      "elapsedMs": 170
     }
   ],
   "counts": {
