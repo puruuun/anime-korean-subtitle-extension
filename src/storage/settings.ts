@@ -99,6 +99,8 @@ export function validateSettings(s: Settings) {
   if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.search || u.hash)
     throw Error('Base URL 형식을 확인하세요.');
   const t = { ...defaultSettings.translation, ...s.translation };
+  const d = { ...defaultDisplay, ...s.display };
+  const { showJapanese, ...displayNumbers } = d;
   if (
     Object.values({
       chunkSize: t.chunkSize,
@@ -109,7 +111,7 @@ export function validateSettings(s: Settings) {
       temperature: t.temperature,
       timeoutMs: t.timeoutMs,
       maxRetry: t.maxRetry,
-      ...s.display,
+      ...displayNumbers,
     }).some((v) => !Number.isFinite(v))
   )
     throw Error('숫자 설정을 확인하세요.');
@@ -137,6 +139,11 @@ export function validateSettings(s: Settings) {
   )
     throw Error('번역 설정 범위를 확인하세요.');
   if (
+    typeof showJapanese !== 'boolean' ||
+    d.japaneseFontSize < 12 ||
+    d.japaneseFontSize > 72 ||
+    d.japaneseOffset < -10 ||
+    d.japaneseOffset > 10 ||
     s.display.fontSize < 12 ||
     s.display.fontSize > 72 ||
     s.display.bottom < 0 ||

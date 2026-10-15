@@ -6,6 +6,9 @@ export interface DisplaySettings {
   backgroundOpacity: number;
   outline: number;
   maxLines: number;
+  showJapanese: boolean;
+  japaneseFontSize: number;
+  japaneseOffset: number;
 }
 export const defaultDisplay: DisplaySettings = {
   fontSize: 28,
@@ -13,6 +16,9 @@ export const defaultDisplay: DisplaySettings = {
   backgroundOpacity: 0.55,
   outline: 2,
   maxLines: 3,
+  showJapanese: false,
+  japaneseFontSize: 22,
+  japaneseOffset: 0,
 };
 function timeLabel(seconds: number) {
   const total = Math.max(0, Math.floor(seconds));
@@ -27,9 +33,12 @@ function timeLabel(seconds: number) {
 export class SubtitleRenderer {
   private cueStore = new Map<number, SubtitleCue>();
   private cues: SubtitleCue[] = [];
+  private japaneseCues: SubtitleCue[] = [];
   private offset = 0;
   private host = document.createElement('div');
   private line = document.createElement('div');
+  private primaryLine = document.createElement('div');
+  private japaneseLine = document.createElement('div');
   private statusLine = document.createElement('div');
   private raf = 0;
   private frame: number | undefined;
@@ -44,12 +53,15 @@ export class SubtitleRenderer {
   constructor(private video: HTMLVideoElement) {
     this.host.dataset.animesubOverlay = 'true';
     this.line.className = 'subtitle';
+    this.primaryLine.className = 'primary-subtitle';
+    this.japaneseLine.className = 'japanese-subtitle';
+    this.line.append(this.primaryLine, this.japaneseLine);
     this.statusLine.className = 'translation-status';
     this.statusLine.hidden = true;
     const shadow = this.host.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
     style.textContent =
-      ':host{pointer-events:none!important;z-index:2147483647!important;position:fixed!important;display:block!important}.subtitle{position:absolute;left:4%;right:4%;text-align:center;white-space:pre-line;font-family:Arial,"Noto Sans KR",sans-serif;color:white;line-height:1.35;overflow:hidden;}span{box-decoration-break:clone;-webkit-box-decoration-break:clone;padding:3px 9px;border-radius:5px}.translation-status{position:absolute;top:10px;right:10px;max-width:90%;padding:6px 9px;border-radius:6px;background:rgba(0,0,0,.65);color:#fff;font:12px/1.5 Arial,"Noto Sans KR",sans-serif;white-space:pre-line;}';
+      ':host{pointer-events:none!important;z-index:2147483647!important;position:fixed!important;display:block!important}.subtitle{position:absolute;left:4%;right:4%;text-align:center;white-space:pre-line;font-family:Arial,"Noto Sans KR","Noto Sans JP",sans-serif;color:white;line-height:1.35;}.primary-subtitle,.japanese-subtitle{overflow:hidden}.japanese-subtitle{color:#d7e7ff;margin-top:6px}span{box-decoration-break:clone;-webkit-box-decoration-break:clone;padding:3px 9px;border-radius:5px}.translation-status{position:absolute;top:10px;right:10px;max-width:90%;padding:6px 9px;border-radius:6px;background:rgba(0,0,0,.65);color:#fff;font:12px/1.5 Arial,"Noto Sans KR",sans-serif;white-space:pre-line;}';
     shadow.append(style, this.line, this.statusLine);
     video.textTracks?.addEventListener?.('addtrack', this.render);
     this.relocate();
@@ -80,6 +92,13 @@ export class SubtitleRenderer {
     );
     this.render();
   }
+  setJapaneseCues(cues: SubtitleCue[]) {
+    this.japaneseCues = cues
+      .map((c) => ({ ...c }))
+      .sort((a, b) => a.startTime - b.startTime || a.id - b.id);
+    this.last = '';
+    this.render();
+  }
   setImmediatePlayback(immediate: boolean) {
     this.immediatePlayback = immediate;
     this.render();
@@ -95,6 +114,7 @@ export class SubtitleRenderer {
     this.render();
   }
   setDisplay(display: DisplaySettings) {
+    display = { ...defaultDisplay, ...display };
     this.display = display;
     this.line.style.fontSize = display.fontSize + 'px';
     this.line.style.bottom = display.bottom + '%';
@@ -102,7 +122,9 @@ export class SubtitleRenderer {
       const a = (i * Math.PI) / 4;
       return Math.cos(a) * display.outline + 'px ' + Math.sin(a) * display.outline + 'px 1px #000';
     }).join(',');
-    this.line.style.maxHeight = display.maxLines * 1.35 + 'em';
+    this.primaryLine.style.maxHeight = display.maxLines * 1.35 + 'em';
+    this.japaneseLine.style.fontSize = display.japaneseFontSize + 'px';
+    this.japaneseLine.style.maxHeight = display.maxLines * 1.35 + 'em';
     this.last = '';
     this.render();
   }
@@ -112,8 +134,9 @@ export class SubtitleRenderer {
       if (track.mode === 'hidden') track.mode = mode;
     this.originalTrackModes.clear();
   }
-  private updateSourceTracks(hasKoreanCue: boolean) {
-    if (!this.cues.length || (this.immediatePlayback && !hasKoreanCue)) {
+  private updateSourceTracks(hasOwnCue: boolean) {
+    const hasTrack = this.cues.length || (this.display.showJapanese && this.japaneseCues.length);
+    if (!hasTrack || (this.immediatePlayback && !hasOwnCue)) {
       this.restoreTracks();
       return;
     }
@@ -173,17 +196,33 @@ export class SubtitleRenderer {
   };
   private native: TextTrack | undefined;
   private nativeCues: VTTCue[] = [];
-  private syncNative(active: SubtitleCue[]) {
+  private syncNative(active: SubtitleCue[], japanese: SubtitleCue[], text: string) {
     if (!this.native) this.native = this.video.addTextTrack('subtitles', '한국어 · AnimeSub', 'ko');
     for (const c of this.nativeCues) this.native.removeCue(c);
-    this.nativeCues = active.map((c) => {
-      const start = Math.max(0, c.startTime - this.offset);
-      const cue = new VTTCue(start, Math.max(start + 0.001, c.endTime - this.offset), c.text);
-      cue.id = String(c.id);
-      return cue;
-    });
+    const visible = [
+      ...active.map((c) => ({
+        ...c,
+        startTime: c.startTime - this.offset,
+        endTime: c.endTime - this.offset,
+      })),
+      ...japanese.map((c) => ({
+        ...c,
+        startTime: c.startTime - this.offset - this.display.japaneseOffset,
+        endTime: c.endTime - this.offset - this.display.japaneseOffset,
+      })),
+    ];
+    const start = Math.max(0, ...visible.map((c) => c.startTime));
+    this.nativeCues = text
+      ? [
+          new VTTCue(
+            start,
+            Math.max(start + 0.001, Math.min(...visible.map((c) => c.endTime))),
+            text,
+          ),
+        ]
+      : [];
     this.nativeCues.forEach((c) => this.native!.addCue(c));
-    this.native.mode = active.length ? 'showing' : 'disabled';
+    this.native.mode = text ? 'showing' : 'disabled';
   }
   private render = () => {
     if (this.disposed) return;
@@ -194,9 +233,19 @@ export class SubtitleRenderer {
     this.host.style.height = r.height + 'px';
     const t = this.video.currentTime + this.offset;
     const active = this.cues.filter((c) => c.startTime <= t && t < c.endTime);
-    this.updateSourceTracks(active.length > 0);
+    const jt = t + this.display.japaneseOffset;
+    const japanese = this.display.showJapanese
+      ? this.japaneseCues.filter((c) => c.startTime <= jt && jt < c.endTime)
+      : [];
+    this.updateSourceTracks(active.length > 0 || japanese.length > 0);
     this.renderStatus();
     const text = active
+      .map((c) => c.text)
+      .join('\n')
+      .split('\n')
+      .slice(0, this.display.maxLines)
+      .join('\n');
+    const japaneseText = japanese
       .map((c) => c.text)
       .join('\n')
       .split('\n')
@@ -210,17 +259,26 @@ export class SubtitleRenderer {
       String(native) +
       this.offset +
       JSON.stringify(active.map((c) => [c.id, c.startTime, c.endTime])) +
-      text;
+      JSON.stringify(japanese.map((c) => [c.id, c.startTime, c.endTime])) +
+      text +
+      '\u0000' +
+      japaneseText;
     if (key !== this.last) {
       this.last = key;
-      this.line.replaceChildren();
-      if (text) {
+      for (const [line, content] of [
+        [this.primaryLine, text],
+        [this.japaneseLine, japaneseText],
+      ] as const) {
+        line.replaceChildren();
+        line.hidden = !content;
+        if (!content) continue;
         const span = document.createElement('span');
-        span.textContent = text;
+        span.textContent = content;
         span.style.background = 'rgba(0,0,0,' + this.display.backgroundOpacity + ')';
-        this.line.append(span);
+        line.append(span);
       }
-      if (native) this.syncNative(active);
+      if (native)
+        this.syncNative(active, japanese, [text, japaneseText].filter(Boolean).join('\n'));
     }
   };
   destroy() {

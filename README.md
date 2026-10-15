@@ -1,17 +1,17 @@
-# Anime Korean Subtitle v0.5.1
+# Anime Korean Subtitle v0.5.2
 
 Miruro / Re:ANIME의 현재 작품과 회차를 감지하고 한국어 자막을 준비하는 Chrome Manifest V3 확장프로그램입니다. 영상·오디오는 다운로드하거나 전사하지 않습니다.
 
 ## 다른 컴퓨터에 설치
 
-1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.5.1.zip`을 받습니다.
+1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.5.2.zip`을 받습니다.
 2. ZIP을 폴더에 압축 해제합니다. 그 폴더의 `extension/manifest.json`을 확인합니다.
 3. Chrome에서 `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
 4. **압축해제된 확장 프로그램 로드**를 눌러 `extension` 폴더를 선택합니다.
 5. 설정에서 **Local LLM** 또는 **Gemini API**를 연결합니다. 한국어 원본 자막에는 번역 서버가 필요 없습니다.
 6. Miruro / Re:ANIME 회차를 열거나 새로고침합니다. 회차 선택만으로 자막 검색·다운로드·번역·적용이 자동 실행됩니다.
 
-기본 ZIP은 **개인용** 빌드입니다. 설치 시 모든 웹사이트 접근 권한(`<all_urls>`)을 사용하며 재생 중 별도의 권한 창을 요청하지 않습니다. 제한된 권한이 필요하면 `anime-korean-subtitle-public-v0.5.1.zip`을 사용하세요. 공개용의 알려지지 않은 배포·플레이어·번역 서버는 재생 전에 설정의 초기 접근 설정에서 한 번 승인합니다. AUTO가 대신 권한 창을 띄우지 않습니다.
+기본 ZIP은 **개인용** 빌드입니다. 설치 시 모든 웹사이트 접근 권한(`<all_urls>`)을 사용하며 재생 중 별도의 권한 창을 요청하지 않습니다. 제한된 권한이 필요하면 `anime-korean-subtitle-public-v0.5.2.zip`을 사용하세요. 공개용의 알려지지 않은 배포·플레이어·번역 서버는 재생 전에 설정의 초기 접근 설정에서 한 번 승인합니다. AUTO가 대신 권한 창을 띄우지 않습니다.
 
 확장 폴더는 설치 후에도 삭제하지 마세요. 업데이트 때는 같은 폴더를 새 버전으로 바꾸고 확장 페이지에서 새로고침하세요. 로그인 정보·개인 API Key는 배포 ZIP에 포함하지 않습니다.
 
@@ -68,6 +68,18 @@ Kitsunekko 미러 일본어 자막 → 한국어 점진 번역
 | 사이트 영어 자막 → 한국어 번역 | 외부 검색 없이 내장 영어만 사용 |
 
 설정의 **자막 자동 검색 설정**에서 세 단계를 각각 끌 수 있습니다. 새 설치에서는 모두 켜져 있습니다. 자막 끄기/취소를 누르면 그 페이지에서는 자동으로 다시 시작하지 않습니다. 다음 회차를 열거나 다시 검색을 누르면 다시 사용할 수 있습니다.
+
+## 한국어 + 일본어 원문 동시 표시
+
+팝업 또는 설정에서 **일본어 원문 함께 보기**를 켜세요. 한국어 아래에 일본어 원문을 추가 표시합니다. 신규 설치와 기존 설정의 기본값은 꺼짐입니다. 설정의 **추가 자막**에서 일본어 글자 크기(기본 22px)와 일본어 추가 싱크(-10~10초)를 조절할 수 있습니다. 추가 싱크는 공통 한국어 싱크에 더해지며 양수는 일본어를 먼저, 음수는 늦게 표시합니다. 설정 저장과 팝업 스위치는 현재 영상에 즉시 반영되고 한국어 검색·번역을 다시 실행하지 않습니다.
+
+일본어 → 한국어 번역 중에는 이미 받은 일본어 원문을 재사용합니다. Anissia 한국어를 쓰는 경우에는 한국어를 먼저 적용하고 Jimaku → Kitsunekko → 사이트 내장 일본어 순으로 추가 자막을 찾습니다. AUTO가 일본어를 찾지 못해 영어 번역으로 넘어간 경우에는 같은 외부 검색을 반복하지 않고 내장 일본어만 확인합니다. 일본어를 못 찾아도 한국어는 계속 표시하며 상태창에 이유를 표시합니다. 일본어가 없을 때 번역으로 일본어를 만들어내지는 않습니다.
+
+각 언어의 실제 Cue 시간으로 표시하므로 파일마다 대사 ID나 줄 나눔이 달라도 함께 볼 수 있습니다. 두 자막은 회차 캐시에 함께 보관하며 다음 회차로 이동하거나 옵션을 끄면 진행 중인 일본어 요청을 취소합니다. 플레이어/iframe 교체와 확장 백그라운드 재시작 후에도 저장된 상태로 옵션을 적용합니다. 컨테이너 전체화면에서는 두 줄을 그대로 유지하고, video 요소 자체의 전체화면은 Chrome 기본 자막 Cue에 두 언어를 합칩니다. 기본 자막 표시에서는 개별 일본어 글꼴 크기가 적용되지 않을 수 있습니다.
+
+## 작업 경과 시간
+
+검색·다운로드·번역·예약된 재시도·플레이어 준비 대기·추가 일본어 검색이 진행 중일 때만 경과 시간을 계산합니다. 남은 작업이 없으면 완료/오류/중단 시각에 멈추고 **종료**를 표시합니다. 이후 재생 시각이 바뀌거나 팝업을 다시 열어도 완료 시간이 늘어나지 않습니다. 완료 후 추가 검색을 시작하면 이전 작업 시간에 새 작업 시간만 더하고 중간에 쉬었던 시간은 제외합니다. 일본어·영어 번역 화면에도 작업 경과를 표시합니다.
 
 ## 회차 감지·재시도·캐시
 
@@ -128,6 +140,7 @@ npm run check
 npx playwright install chromium
 npm run test:browser
 npm run test:browser:auto
+npm run test:browser:dual
 npm run test:browser:settings
 npm run test:browser:progressive
 npm run test:browser:anissia
@@ -139,6 +152,6 @@ node scripts/verify-live-provider.mjs
 node scripts/research-live.mjs
 ```
 
-`dist/`는 Chrome에 로드할 결과물입니다. `npm run check`는 typecheck, unit tests, build를 실행합니다. 브라우저 회귀 검사는 격리된 실제 MV3 확장과 모의 서비스/번역 응답을 사용합니다. Anissia 배포 형태 검사는 실제 Blogspot·Drive·티스토리 파일을 사용하며 `qa/anissia-distribution-report.json` 및 `qa/anissia-distribution-browser-report.json`에 기록합니다. 다른 실제 서비스 확인은 `qa/services-report.json`, 실제 페이지에서 실행한 두 Adapter 결과는 `qa/live-site-research.json`에 기록합니다. 이번 권한/AUTO 개편의 상세 결과는 [qa/AUTO-UX-REPORT-v0.5.0.md](qa/AUTO-UX-REPORT-v0.5.0.md)를 참고하세요. 권한 가이드·업데이트 확인 기능의 v0.5.1 검증은 [qa/SETTINGS-UPDATE-REPORT-v0.5.1.md](qa/SETTINGS-UPDATE-REPORT-v0.5.1.md)를 참고하세요. 상세 검증 범위와 제한은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
+`dist/`는 Chrome에 로드할 결과물입니다. `npm run check`는 typecheck, unit tests, build를 실행합니다. 브라우저 회귀 검사는 격리된 실제 MV3 확장과 모의 서비스/번역 응답을 사용합니다. Anissia 배포 형태 검사는 실제 Blogspot·Drive·티스토리 파일을 사용하며 `qa/anissia-distribution-report.json` 및 `qa/anissia-distribution-browser-report.json`에 기록합니다. 다른 실제 서비스 확인은 `qa/services-report.json`, 실제 페이지에서 실행한 두 Adapter 결과는 `qa/live-site-research.json`에 기록합니다. 이번 권한/AUTO 개편의 상세 결과는 [qa/AUTO-UX-REPORT-v0.5.0.md](qa/AUTO-UX-REPORT-v0.5.0.md)를 참고하세요. 권한 가이드·업데이트 확인 기능의 v0.5.1 검증은 [qa/SETTINGS-UPDATE-REPORT-v0.5.1.md](qa/SETTINGS-UPDATE-REPORT-v0.5.1.md)를 참고하세요. 작업 시간 정지·동시 자막의 v0.5.2 검증은 [qa/DUAL-SUBTITLE-REPORT-v0.5.2.md](qa/DUAL-SUBTITLE-REPORT-v0.5.2.md)를 참고하세요. 상세 검증 범위와 제한은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
 
 자막 렌더러, 회차별 싱크, fullscreen, seek와 progressive buffer UI는 유지됩니다. ASS는 시간·대사 중심으로 처리하며 고급 스타일을 보존하지 않습니다. HLS는 WebVTT subtitle segment만 읽습니다.

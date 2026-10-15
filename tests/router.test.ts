@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AnimeContext } from '../src/anime/AnimeContext';
 import type { Settings } from '../src/storage/settings';
 import type { SubtitleCue } from '../src/subtitle/SubtitleCue';
@@ -19,6 +19,8 @@ const harness = vi.hoisted(() => ({
   sent: [] as { tabId: number; message: Record<string, unknown> }[],
   apply: vi.fn(),
   clear: vi.fn(),
+  showJapanese: false,
+  japanese: vi.fn(),
 }));
 
 vi.mock('../src/subtitle/SubtitleCore', () => ({
@@ -49,8 +51,16 @@ vi.mock('../src/subtitle/SubtitleCore', () => ({
 vi.mock('../src/storage/settings', async () => {
   const actual =
     await vi.importActual<typeof import('../src/storage/settings')>('../src/storage/settings');
-  return { ...actual, getSettings: async () => structuredClone(actual.defaultSettings) };
+  return {
+    ...actual,
+    getSettings: async () => {
+      const s = structuredClone(actual.defaultSettings);
+      s.display.showJapanese = harness.showJapanese;
+      return s;
+    },
+  };
 });
+vi.mock('../src/subtitle/SecondaryJapanese', () => ({ secondaryJapanese: harness.japanese }));
 vi.mock('../src/providers/createProviders', () => ({ createProviders: () => [] }));
 vi.mock('../src/anime/AnimeResolver', () => ({
   resolveAnime: async (context: AnimeContext) => context,
@@ -109,12 +119,15 @@ beforeEach(() => {
   harness.sent.length = 0;
   harness.apply.mockClear();
   harness.clear.mockClear();
+  harness.showJapanese = false;
+  harness.japanese.mockReset().mockResolvedValue(undefined);
   storage = new Map();
   tabGet = vi.fn(async () => ({ id: 9, url: context.pageUrl }));
   vi.stubGlobal('chrome', {
     runtime: { id: 'test-extension', getURL: (path: string) => 'chrome-extension://test/' + path },
     tabs: {
       get: tabGet,
+      query: async () => [{ id: 9, url: context.pageUrl }],
       sendMessage: vi.fn(async (_tabId: number, message: { type: string }) =>
         message.type === 'PLAYBACK' ? { ok: true, currentTime: 201 } : { ok: true },
       ),
@@ -139,6 +152,180 @@ beforeEach(() => {
         },
       },
     },
+  });
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+describe('elapsed clock and independent Japanese lifecycle', () => {
+  it('cancels extra searching on switch-off and excludes idle time before a new request', async () => {
+    harness.showJapanese = true;
+    const pending: { signal: AbortSignal; finish: (value: unknown) => void }[] = [];
+    harness.japanese.mockImplementation(
+      (_c, _p, signal) => new Promise((finish) => pending.push({ signal, finish })),
+    );
+    const router = await import('../src/background/messageRouter');
+    await router.startJob(9, 'ko', context);
+    await vi.waitFor(() => expect(harness.cores).toHaveLength(1));
+    await harness.cores[0].progressive.onSource?.({ cues, language: 'ko', source: 'anissia' });
+    harness.cores[0].finish(cues);
+    await vi.waitFor(async () => expect((await router.currentStatus(9))?.stage).toBe('done'));
+    harness.showJapanese = false;
+    await router.displayPreferencesChanged();
+    expect(pending[0].signal.aborted).toBe(true);
+    const stopped = await router.currentStatus(9);
+    expect(stopped?.finishedAt).toBeTypeOf('number');
+    vi.spyOn(Date, 'now').mockReturnValue(stopped!.finishedAt! + 60000);
+    harness.showJapanese = true;
+    await router.displayPreferencesChanged();
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    expect((await router.currentStatus(9))?.workElapsedMs).toBe(stopped!.workElapsedMs);
+    pending[0].finish({ cues: [{ ...cues[0], text: 'obsolete' }], source: 'jimaku' });
+    pending[1].finish({ cues: [{ ...cues[0], text: '新しい原文' }], source: 'jimaku' });
+    await vi.waitFor(async () =>
+      expect((await router.currentStatus(9))?.japanese?.state).toBe('ready'),
+    );
+    expect(storage.get('render:9')).toMatchObject({ japaneseCues: [{ text: '新しい原文' }] });
+    await router.cancelJob(9);
+  });
+  it('freezes after completion and later playback/offset updates', async () => {
+    const router = await import('../src/background/messageRouter');
+    await router.startJob(9, 'ko', context);
+    await vi.waitFor(() => expect(harness.cores).toHaveLength(1));
+    harness.cores[0].finish(cues);
+    await vi.waitFor(async () => expect((await router.currentStatus(9))?.stage).toBe('done'));
+    const before = await router.currentStatus(9);
+    vi.spyOn(Date, 'now').mockReturnValue(before!.finishedAt! + 60000);
+    await router.updateOffset(9, 1);
+    expect(await router.currentStatus(9)).toMatchObject({
+      finishedAt: before!.finishedAt,
+      workElapsedMs: before!.workElapsedMs,
+      workActiveSince: undefined,
+    });
+    await router.cancelJob(9);
+  });
+  it('applies Korean while Japanese is pending, deduplicates its fetch and freezes only after both finish', async () => {
+    harness.showJapanese = true;
+    let finish!: (value: unknown) => void;
+    harness.japanese.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const router = await import('../src/background/messageRouter');
+    await router.startJob(9, 'ko', context);
+    await vi.waitFor(() => expect(harness.cores).toHaveLength(1));
+    await harness.cores[0].progressive.onSource?.({ cues, language: 'ko', source: 'anissia' });
+    harness.cores[0].finish(cues);
+    await vi.waitFor(async () =>
+      expect(await router.currentStatus(9)).toMatchObject({
+        stage: 'done',
+        busy: false,
+        japanese: { state: 'searching' },
+        finishedAt: undefined,
+      }),
+    );
+    expect(harness.apply).toHaveBeenCalledOnce();
+    await router.displayPreferencesChanged();
+    expect(harness.japanese).toHaveBeenCalledOnce();
+    finish({ cues: [{ ...cues[0], text: '日本語' }], source: 'jimaku' });
+    await vi.waitFor(async () =>
+      expect((await router.currentStatus(9))?.japanese?.state).toBe('ready'),
+    );
+    expect((await router.currentStatus(9))?.finishedAt).toBeTypeOf('number');
+    expect(storage.get('render:9')).toMatchObject({ japaneseCues: [{ text: '日本語' }] });
+    await router.cancelJob(9);
+  });
+  it('reuses Japanese translation originals without a second search and switches off live', async () => {
+    harness.showJapanese = true;
+    const router = await import('../src/background/messageRouter');
+    await router.startJob(9, 'ja', context);
+    await vi.waitFor(() => expect(harness.cores).toHaveLength(1));
+    const original = cues.map((c) => ({ ...c, text: '日本語' + c.id }));
+    await harness.cores[0].progressive.onSource?.({
+      cues: original,
+      language: 'ja',
+      source: 'jimaku',
+    });
+    await vi.waitFor(() =>
+      expect(harness.sent.some((s) => s.message.type === 'JAPANESE_CUES')).toBe(true),
+    );
+    expect(harness.japanese).not.toHaveBeenCalled();
+    harness.cores[0].finish(cues);
+    await vi.waitFor(async () => expect((await router.currentStatus(9))?.stage).toBe('done'));
+    harness.showJapanese = false;
+    await router.displayPreferencesChanged();
+    expect((await router.currentStatus(9))?.japanese?.state).toBe('off');
+    harness.showJapanese = true;
+    await router.displayPreferencesChanged();
+    expect(harness.cores).toHaveLength(1);
+    expect(harness.japanese).not.toHaveBeenCalled();
+    await router.cancelJob(9);
+  });
+  it('cancels an older episode extra-track request and rejects its late result', async () => {
+    harness.showJapanese = true;
+    let finish!: (value: unknown) => void;
+    let signal!: AbortSignal;
+    harness.japanese.mockImplementation((_c, _p, s) => {
+      signal = s;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    const router = await import('../src/background/messageRouter');
+    await router.startJob(9, 'ko', context);
+    await vi.waitFor(() => expect(harness.cores).toHaveLength(1));
+    await harness.cores[0].progressive.onSource?.({ cues, language: 'ko', source: 'anissia' });
+    await vi.waitFor(() => expect(harness.japanese).toHaveBeenCalledOnce());
+    await router.cancelJob(9);
+    expect(signal.aborted).toBe(true);
+    const before = harness.sent.length;
+    finish({ cues: [{ ...cues[0], text: 'obsolete' }], source: 'jimaku' });
+    harness.cores[0].finish(cues);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(harness.sent).toHaveLength(before);
+    expect(storage.has('render:9')).toBe(false);
+  });
+  it('restores a completed session after worker restart and toggles from saved Japanese without rerunning Korean', async () => {
+    harness.showJapanese = true;
+    storage.set('job:9', {
+      jobId: 'saved',
+      context,
+      mode: 'ko',
+      busy: false,
+      epoch: 8,
+      offset: 0,
+      updatedAt: 4000,
+      startedAt: 1000,
+      finishedAt: 4000,
+      workElapsedMs: 3000,
+      stage: 'done',
+      message: 'done',
+      source: 'anissia',
+      japanese: { state: 'off', message: 'off' },
+    });
+    storage.set('epoch:9', 8);
+    storage.set('render:9', {
+      epoch: 8,
+      cues,
+      bootstrapReady: true,
+      japaneseCues: [{ ...cues[0], text: '保存した日本語' }],
+      japaneseSource: 'jimaku',
+      cacheKey: 'saved-key',
+    });
+    const router = await import('../src/background/messageRouter');
+    await router.displayPreferencesChanged();
+    await vi.waitFor(async () =>
+      expect((await router.currentStatus(9))?.japanese?.state).toBe('ready'),
+    );
+    expect(harness.cores).toHaveLength(0);
+    expect(harness.japanese).not.toHaveBeenCalled();
+    expect((await router.currentStatus(9))?.workElapsedMs).toBe(3000);
+    await router.cancelJob(9);
   });
 });
 

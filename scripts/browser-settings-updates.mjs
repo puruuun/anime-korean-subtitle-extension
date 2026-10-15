@@ -1,10 +1,14 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 const profile = process.env.ANIMESUB_TEST_PROFILE ?? 'personal';
 const dist = resolve(process.env.ANIMESUB_TEST_DIST ?? 'dist');
+const currentVersion = JSON.parse(await readFile(join(dist, 'manifest.json'), 'utf8')).version;
+const nextParts = currentVersion.split('.').map(Number);
+nextParts[nextParts.length - 1]++;
+const nextVersion = nextParts.join('.');
 const temp = await mkdtemp(join(tmpdir(), 'animesub-settings-'));
 const tests = [],
   requests = [];
@@ -38,12 +42,12 @@ try {
         json: {
           tag_name:
             phase === 'newer'
-              ? 'v0.5.2'
+              ? 'v' + nextVersion
               : phase === 'ahead'
                 ? 'v0.5.0'
                 : phase === 'invalid'
                   ? 'nightly'
-                  : 'v0.5.1',
+                  : 'v' + currentVersion,
           name: 'Settings test Release',
           draft: false,
           prerelease: phase === 'prerelease',
@@ -63,7 +67,7 @@ try {
     };
   });
   const manifest = await worker.evaluate(() => chrome.runtime.getManifest());
-  assert.equal(manifest.version, '0.5.1');
+  assert.equal(manifest.version, currentVersion);
   assert.equal(
     await worker.evaluate(() =>
       chrome.permissions.contains({ origins: ['https://api.github.com/*'] }),
@@ -146,11 +150,11 @@ try {
     await state(expected);
   };
   await refresh('newer', 'available');
-  assert.match(await page.locator('.update-status').innerText(), /v0\.5\.2/);
+  assert((await page.locator('.update-status').innerText()).includes('v' + nextVersion));
   assert((await page.locator('.extension-updates').innerText()).includes('새 버전 설치 방법'));
   assert.equal(
     await page.getByRole('link', { name: 'GitHub Release 열기 ↗' }).getAttribute('href'),
-    'https://github.com/puruuun/anime-korean-subtitle-extension/releases/tag/v0.5.2',
+    'https://github.com/puruuun/anime-korean-subtitle-extension/releases/tag/v' + nextVersion,
   );
   tests.push(
     'Newer numeric version displays update needed, download link and folder-preserving installation steps',

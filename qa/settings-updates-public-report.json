@@ -1,6 +1,6 @@
 {
-  "date": "2026-10-05T07:26:30.663Z",
-  "version": "0.5.1",
+  "date": "2026-10-14T19:47:39.724Z",
+  "version": "0.5.2",
   "profile": "public",
   "passed": [
     "GitHub API is granted at installation in public build",

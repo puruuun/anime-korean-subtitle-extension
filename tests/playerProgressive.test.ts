@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { defaultDisplay } from '../src/subtitle/SubtitleRenderer';
 vi.mock('../src/content/bridgeStore', () => ({
   installBridgeListener: vi.fn(),
   clearBridge: vi.fn(),
@@ -94,6 +95,39 @@ afterEach(() => {
 });
 
 describe('progressive player isolation', () => {
+  it('clears both tracks and rejects Japanese messages from the previous episode', async () => {
+    await dispatch({
+      type: 'APPLY',
+      epoch: 5,
+      display: { ...defaultDisplay, showJapanese: true },
+      cues: [{ id: 1, startTime: 1, endTime: 4, text: '한국어' }],
+    });
+    await dispatch({
+      type: 'JAPANESE_CUES',
+      epoch: 5,
+      cues: [{ id: 1, startTime: 1, endTime: 4, text: '日本語' }],
+    });
+    video.currentTime = 2;
+    video.dispatchEvent(new Event('seeked'));
+    expect(root.querySelector('.japanese-subtitle')?.textContent).toBe('日本語');
+    await dispatch({ type: 'CLEAR', epoch: 6 });
+    expect(root.querySelector('.primary-subtitle')?.textContent).toBe('');
+    expect(root.querySelector('.japanese-subtitle')?.textContent).toBe('');
+    expect(
+      await dispatch({
+        type: 'JAPANESE_CUES',
+        epoch: 5,
+        cues: [{ id: 1, startTime: 1, endTime: 4, text: 'obsolete' }],
+      }),
+    ).toMatchObject({ ok: false });
+    await dispatch({
+      type: 'APPLY',
+      epoch: 6,
+      cues: [{ id: 1, startTime: 1, endTime: 4, text: '새 회차' }],
+    });
+    expect(root.querySelector('.primary-subtitle')?.textContent).toBe('새 회차');
+    expect(root.querySelector('.japanese-subtitle')?.textContent).toBe('');
+  });
   it('pauses only for bootstrap and resumes an originally playing video when the first chunk is available', async () => {
     playing = true;
     await dispatch({ type: 'PREPARE', epoch: 1, immediatePlayback: false, sourceLanguage: 'en' });

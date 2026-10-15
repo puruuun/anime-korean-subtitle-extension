@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-15T20:02:24.735Z",
+  "profile": "public",
+  "version": "0.5.2",
+  "passed": [
+    "Japanese is opt-in and settings preserve AUTO defaults",
+    "Korean applies immediately while Japanese is pending; clock continues until extra work ends",
+    "One Japanese download joins Korean with no LLM calls and stops the job clock",
+    "Closed-shadow renderer visibly contains Korean above real Japanese at matching timestamps",
+    "Popup switch changes only Japanese, retaining Korean/job identity with no extra download/search/translation",
+    "Elapsed time stays frozen through popup polling and playback seeks after completion",
+    "Settings immediately change Japanese font and independent timing without restarting Korean",
+    "Container fullscreen retains both subtitle lines",
+    "Video-element fullscreen fallback combines both languages in a native cue",
+    "Episode revisit restores Korean plus Japanese from cache without another file download",
+    "Progressive Japanese translation shows first Korean chunk plus original Japanese before full completion",
+    "Japanese translation originals are reused without a duplicate search or file request",
+    "Missing Japanese leaves Korean applied and ends the clock with an explicit unavailable message",
+    "Fast episode changes abort and reject previous Japanese results; only current episode remains",
+    "Re:ANIME cross-origin player iframe receives both Korean and Japanese",
+    "Replacing iframe restores both tracks with no repeated provider or translation work",
+    "All dual subtitle and clock scenarios make zero runtime permission requests"
+  ],
+  "count": 17,
+  "counts": {
+    "ko": 16,
+    "ja": 13,
+    "jpFiles": 6,
+    "koFiles": 6,
+    "llm": 2,
+    "aborted": 0
+  },
+  "permissionRequests": 0,
+  "boundaries": "Isolated Chromium MV3, simulated service/site/player/LLM responses, real routing/cache/renderer/CDP closed-shadow inspection. Native video fullscreen branch is simulated; container fullscreen is real. User Chrome untouched."
+}

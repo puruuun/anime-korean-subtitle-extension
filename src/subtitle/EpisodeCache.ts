@@ -8,6 +8,8 @@ export interface EpisodeSnapshot {
   context: AnimeContext;
   cues: SubtitleCue[];
   originalCues?: SubtitleCue[];
+  japaneseCues?: SubtitleCue[];
+  japaneseSource?: string;
   language: 'ko' | 'ja' | 'en';
   source: string;
   path?: string;

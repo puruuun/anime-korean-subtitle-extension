@@ -359,6 +359,53 @@ function SettingsPage() {
           구간이며, 기본값은 300초입니다. 서버 속도에 따라 일시적으로 부족할 수 있습니다.
         </p>
         <hr />
+        <h3>추가 자막</h3>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={s.display.showJapanese}
+            onChange={(e) =>
+              setS({ ...s, display: { ...s.display, showJapanese: e.target.checked } })
+            }
+          />
+          일본어 원문 함께 보기
+        </label>
+        <p className="muted">
+          한국어 위주로 보면서 아래에 일본어 원문을 함께 표시합니다. 일본어 번역 원문은 재사용하고,
+          한국어 원본을 쓰는 경우에는 일본어 자막을 별도로 찾습니다. 일본어를 찾지 못해도 한국어는
+          계속 표시합니다. 저장하면 현재 영상에도 적용됩니다.
+        </p>
+        <div className="grid">
+          <label>
+            일본어 글자 크기 (px)
+            <input
+              type="number"
+              min="12"
+              max="72"
+              value={s.display.japaneseFontSize}
+              onChange={(e) =>
+                setS({ ...s, display: { ...s.display, japaneseFontSize: Number(e.target.value) } })
+              }
+            />
+          </label>
+          <label>
+            일본어 추가 싱크 (초)
+            <input
+              type="number"
+              min="-10"
+              max="10"
+              step="0.1"
+              value={s.display.japaneseOffset}
+              onChange={(e) =>
+                setS({ ...s, display: { ...s.display, japaneseOffset: Number(e.target.value) } })
+              }
+            />
+          </label>
+        </div>
+        <p className="muted">
+          일본어 추가 싱크는 한국어 싱크에 더해집니다. 양수는 일본어를 먼저, 음수는 늦게 표시합니다.
+          일본어를 따로 켜거나 꺼도 한국어 검색·번역을 다시 실행하지 않습니다.
+        </p>
         <div className="grid">
           {(
             [
@@ -401,6 +448,11 @@ function SettingsPage() {
           }}
         >
           자막 표시 미리보기
+          {s.display.showJapanese && (
+            <div style={{ fontSize: s.display.japaneseFontSize, color: '#d7e7ff', marginTop: 6 }}>
+              日本語の字幕を一緒に表示
+            </div>
+          )}
         </div>
       </section>
       {error && (

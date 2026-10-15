@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { SubtitleRenderer } from '../src/subtitle/SubtitleRenderer';
+import { SubtitleRenderer, defaultDisplay } from '../src/subtitle/SubtitleRenderer';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -41,6 +41,74 @@ function fixture(tracks: TextTrack[] = []) {
 }
 
 describe('renderer lifecycle', () => {
+  it('hides duplicate site tracks while only original Japanese is ready, then restores them when switched off', () => {
+    const english = { label: 'English', mode: 'showing' } as TextTrack;
+    const { renderer, video } = fixture([english]);
+    renderer.setImmediatePlayback(true);
+    renderer.setJapaneseCues([{ id: 1, startTime: 1, endTime: 4, text: '日本語' }]);
+    video.currentTime = 2;
+    renderer.setDisplay({ ...defaultDisplay, showJapanese: true });
+    expect(english.mode).toBe('hidden');
+    renderer.setDisplay(defaultDisplay);
+    expect(english.mode).toBe('showing');
+    renderer.destroy();
+  });
+  it('renders independent Korean/Japanese timings, offset, font and live on/off without ID collisions', () => {
+    const { renderer, video, root } = fixture();
+    renderer.setCues([{ id: 1, startTime: 1, endTime: 6, text: '한국어' }]);
+    renderer.setJapaneseCues([{ id: 1, startTime: 2, endTime: 4, text: '日本語' }]);
+    video.currentTime = 3;
+    video.dispatchEvent(new Event('seeked'));
+    expect(root().querySelector('.japanese-subtitle')?.textContent).toBe('');
+    renderer.setDisplay({ ...defaultDisplay, showJapanese: true, japaneseFontSize: 20 });
+    expect(root().querySelector('.primary-subtitle')?.textContent).toBe('한국어');
+    expect(root().querySelector('.japanese-subtitle')?.textContent).toBe('日本語');
+    expect((root().querySelector('.japanese-subtitle') as HTMLElement).style.fontSize).toBe('20px');
+    video.currentTime = 4.5;
+    video.dispatchEvent(new Event('seeked'));
+    expect(root().querySelector('.primary-subtitle')?.textContent).toBe('한국어');
+    expect(root().querySelector('.japanese-subtitle')?.textContent).toBe('');
+    renderer.setDisplay({ ...defaultDisplay, showJapanese: true, japaneseOffset: -2 });
+    expect(root().querySelector('.japanese-subtitle')?.textContent).toBe('日本語');
+    renderer.setDisplay(defaultDisplay);
+    expect(root().querySelector('.primary-subtitle')?.textContent).toBe('한국어');
+    expect(root().querySelector('.japanese-subtitle')?.textContent).toBe('');
+    renderer.destroy();
+  });
+  it('keeps both languages in a native track for video-element fullscreen and clears it on exit', () => {
+    const { renderer, video } = fixture();
+    const native = {
+      mode: 'disabled',
+      addCue: vi.fn(),
+      removeCue: vi.fn(),
+    } as unknown as TextTrack;
+    vi.spyOn(video, 'addTextTrack').mockReturnValue(native);
+    vi.stubGlobal(
+      'VTTCue',
+      class {
+        constructor(
+          public startTime: number,
+          public endTime: number,
+          public text: string,
+        ) {}
+      },
+    );
+    renderer.setCues([{ id: 1, startTime: 1, endTime: 6, text: '한국어' }]);
+    renderer.setJapaneseCues([{ id: 2, startTime: 2, endTime: 4, text: '日本語' }]);
+    renderer.setDisplay({ ...defaultDisplay, showJapanese: true });
+    video.currentTime = 3;
+    Object.defineProperty(document, 'fullscreenElement', { value: video, configurable: true });
+    document.dispatchEvent(new Event('fullscreenchange'));
+    expect(native.addCue).toHaveBeenLastCalledWith(
+      expect.objectContaining({ text: '한국어\n日本語', startTime: 2, endTime: 4 }),
+    );
+    expect(native.mode).toBe('showing');
+    Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
+    document.dispatchEvent(new Event('fullscreenchange'));
+    expect(native.mode).toBe('disabled');
+    renderer.destroy();
+    vi.unstubAllGlobals();
+  });
   it('renders currentTime, seeking, offset and pause; clears and destroys', () => {
     const { renderer, video, root } = fixture();
     renderer.setCues([

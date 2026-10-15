@@ -15,6 +15,8 @@ import { errorText } from '../utils/errors';
 import { setDebug, log } from '../utils/logger';
 import { getOffset } from '../storage/offsets';
 import { EpisodeCache, episodeCacheKey } from '../subtitle/EpisodeCache';
+import { secondaryJapanese, type JapaneseStatus } from '../subtitle/SecondaryJapanese';
+import { settleWorkClock } from './jobClock';
 import {
   AUTO_RETRY_WINDOW_MS,
   AUTO_RETRY_DELAYS_MS,
@@ -43,6 +45,10 @@ export interface JobStatus extends CoreStatus {
   updatedAt: number;
   episodeKey?: string;
   startedAt?: number;
+  finishedAt?: number;
+  workElapsedMs?: number;
+  workActiveSince?: number;
+  japanese?: JapaneseStatus;
   playbackTime?: number;
   cached?: boolean;
   retry?: {
@@ -67,6 +73,9 @@ interface Job {
   writes: Promise<void>;
   cacheKey: string;
   originalCues?: SubtitleCue[];
+  japaneseCues?: SubtitleCue[];
+  japaneseSource?: string;
+  japaneseController?: AbortController;
   automatic?: AutoEpisode;
 }
 const jobs = new Map<number, Job>();
@@ -124,7 +133,7 @@ function enqueue(tabId: number, j: Job, action: () => Promise<void>) {
 }
 function publish(tabId: number, j: Job, s: CoreStatus) {
   if (!active(tabId, j)) return Promise.resolve();
-  j.status = { ...j.status, ...s, updatedAt: Date.now() };
+  j.status = settleWorkClock({ ...j.status, ...s, updatedAt: Date.now() });
   const status = uiStatus(j.status);
   return enqueue(tabId, j, async () => {
     await chrome.storage.session.set({ ['job:' + tabId]: status });
@@ -141,6 +150,10 @@ function publish(tabId: number, j: Job, s: CoreStatus) {
 function renderSnapshot(j: Job) {
   return {
     cues: j.cues,
+    japaneseCues: j.japaneseCues,
+    japaneseSource: j.japaneseSource,
+    originalCues: j.originalCues,
+    cacheKey: j.cacheKey,
     display: j.settings.display,
     offset: j.status.offset,
     epoch: j.status.epoch,
@@ -162,6 +175,8 @@ function persistRender(tabId: number, j: Job) {
         context: j.status.context,
         cues: j.cues,
         originalCues: j.originalCues,
+        japaneseCues: j.japaneseCues,
+        japaneseSource: j.japaneseSource,
         language: j.sourceLanguage ?? 'ko',
         source: j.status.source,
         path: j.status.path,
@@ -175,6 +190,85 @@ function persistRender(tabId: number, j: Job) {
           ),
       });
   });
+}
+async function japaneseStatus(tabId: number, j: Job, status: JapaneseStatus) {
+  if (!active(tabId, j) || (status.state !== 'off' && !j.settings.display.showJapanese)) return;
+  j.status.japanese = status;
+  await publish(tabId, j, { stage: j.status.stage, message: j.status.message });
+}
+async function sendJapanese(tabId: number, j: Job) {
+  await persistRender(tabId, j);
+  if (active(tabId, j))
+    await sendVideoMessage(tabId, {
+      type: 'JAPANESE_CUES',
+      epoch: j.status.epoch,
+      cues: j.japaneseCues ?? [],
+    });
+}
+function ensureJapanese(tabId: number, j: Job) {
+  if (!active(tabId, j) || !j.settings.display.showJapanese) return;
+  if (j.japaneseCues?.length) {
+    if (j.status.japanese?.state === 'ready') return;
+    void (async () => {
+      await sendJapanese(tabId, j);
+      await japaneseStatus(tabId, j, {
+        state: 'ready',
+        source: j.japaneseSource,
+        message: '일본어 원문 함께 표시 중',
+      });
+    })();
+    return;
+  }
+  if (j.japaneseController) return;
+  const controller = new AbortController();
+  j.japaneseController = controller;
+  const abort = () => controller.abort();
+  j.controller.signal.addEventListener('abort', abort, { once: true });
+  void (async () => {
+    try {
+      await japaneseStatus(tabId, j, {
+        state: 'searching',
+        message: '한국어 자막은 유지하며 일본어 원문을 찾는 중…',
+      });
+      const skipExternal =
+        j.status.mode === 'auto' &&
+        j.sourceLanguage === 'en' &&
+        j.settings.autoSources.japaneseTranslation;
+      const result = await secondaryJapanese(
+        j.status.context,
+        createProviders(j.settings, controller.signal),
+        controller.signal,
+        () => collectSubtitles(tabId),
+        skipExternal,
+      );
+      if (!active(tabId, j) || controller.signal.aborted || j.japaneseController !== controller)
+        return;
+      if (result) {
+        j.japaneseCues = result.cues;
+        j.japaneseSource = result.source;
+        await sendJapanese(tabId, j);
+        await japaneseStatus(tabId, j, {
+          state: 'ready',
+          source: result.source,
+          message: '일본어 원문 함께 표시 중',
+        });
+      } else {
+        await japaneseStatus(tabId, j, {
+          state: 'unavailable',
+          message: '이 회차의 일본어 원문 자막을 찾지 못했습니다. 한국어 자막은 계속 표시합니다.',
+        });
+      }
+    } catch {
+      if (active(tabId, j) && !controller.signal.aborted)
+        await japaneseStatus(tabId, j, {
+          state: 'error',
+          message: '일본어 추가 자막을 가져오지 못했습니다. 한국어 자막은 계속 표시합니다.',
+        });
+    } finally {
+      j.controller.signal.removeEventListener('abort', abort);
+      if (j.japaneseController === controller) j.japaneseController = undefined;
+    }
+  })();
 }
 async function setBusy(tabId: number, busy: boolean, epoch: number) {
   const frames = await chrome.webNavigation.getAllFrames({ tabId }).catch(() => []);
@@ -253,13 +347,25 @@ export async function currentStatus(tabId: number): Promise<JobStatus | undefine
   }
   const r = await chrome.storage.session.get('job:' + tabId);
   const stored = r['job:' + tabId] as JobStatus | undefined;
-  return stored?.busy
-    ? {
-        ...stored,
-        busy: false,
-        stage: 'interrupted',
-        message: '브라우저가 작업을 중단했습니다. 다시 적용하면 완료된 Chunk 캐시부터 이어집니다.',
-      }
+  return stored && (stored.busy || stored.japanese?.state === 'searching')
+    ? settleWorkClock<JobStatus>(
+        {
+          ...stored,
+          busy: false,
+          stage: 'interrupted',
+          message:
+            '브라우저가 작업을 중단했습니다. 다시 적용하면 완료된 Chunk 캐시부터 이어집니다.',
+          japanese:
+            stored.japanese?.state === 'searching'
+              ? {
+                  state: 'error',
+                  message:
+                    '일본어 추가 자막 검색이 중단되었습니다. 옵션을 다시 켜거나 다시 검색하세요.',
+                }
+              : stored.japanese,
+        },
+        stored.updatedAt,
+      )
     : stored;
 }
 async function startJobInternal(
@@ -332,6 +438,9 @@ async function startJobInternal(
       message: '작품 정보 인식 중...',
       episodeKey: episodeKey(detected),
       startedAt: automatic?.startedAt ?? Date.now(),
+      workElapsedMs: automatic ? Math.max(0, Date.now() - automatic.startedAt) : 0,
+      workActiveSince: Date.now(),
+      japanese: { state: 'off', message: '일본어 추가 자막 꺼짐' },
       playbackTime: 0,
       retry: automatic
         ? {
@@ -361,6 +470,10 @@ async function startJobInternal(
         j.cues = cached.cues;
         j.sourceLanguage = cached.language === 'ko' ? undefined : cached.language;
         j.originalCues = cached.originalCues;
+        j.japaneseCues =
+          cached.japaneseCues ?? (cached.language === 'ja' ? cached.originalCues : undefined);
+        j.japaneseSource =
+          cached.japaneseSource ?? (cached.language === 'ja' ? cached.source : undefined);
         j.status.translation = cached.translation;
         j.bootstrapReady = true;
         await applyCues(tabId, j.cues, s.display, j.status.offset, epoch);
@@ -371,6 +484,7 @@ async function startJobInternal(
             : '저장된 자막 적용 · 나머지 번역을 이어갑니다.',
         });
         await persistRender(tabId, j);
+        ensureJapanese(tabId, j);
         if (cached.complete) {
           j.status.busy = false;
           await publish(tabId, j, {
@@ -396,11 +510,25 @@ async function startJobInternal(
         j.controller.signal,
         () => collectSubtitles(tabId),
         {
+          onSource: async (result) => {
+            if (!active(tabId, j)) return;
+            j.sourceLanguage = result.language === 'ko' ? undefined : result.language;
+            if (result.language === 'ja') {
+              j.japaneseCues = result.cues;
+              j.japaneseSource = result.source;
+            }
+            ensureJapanese(tabId, j);
+          },
           onStart: async (original, language, queue) => {
             if (!active(tabId, j)) return;
             j.queue = queue;
             j.sourceLanguage = language;
             j.originalCues = original;
+            if (language === 'ja') {
+              j.japaneseCues = original;
+              j.japaneseSource = j.status.source;
+              ensureJapanese(tabId, j);
+            }
             await readPlayback(tabId, j);
             await persistRender(tabId, j);
             if (!active(tabId, j)) return;
@@ -508,7 +636,7 @@ async function waitingStatus(
   message: string,
   mode: Mode = 'auto',
 ) {
-  const status: JobStatus = {
+  const status: JobStatus = settleWorkClock({
     jobId: crypto.randomUUID(),
     context: state.context,
     mode,
@@ -526,7 +654,7 @@ async function waitingStatus(
       nextAt: state.nextAt,
       deadlineAt: state.deadlineAt,
     },
-  };
+  });
   await chrome.storage.session.set({ ['job:' + tabId]: status });
   await persistAutomatic(tabId, state);
 }
@@ -789,6 +917,80 @@ export async function preferencesChanged() {
       }),
   );
 }
+export async function displayPreferencesChanged() {
+  const settings = await getSettings();
+  // Completed jobs outlive the MV3 worker in session storage. Restore their existing
+  // render state so toggling the extra track never restarts Korean acquisition.
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (tab.id === undefined || !isSite(tab.url) || jobs.has(tab.id)) continue;
+    const id = tab.id;
+    const stored = await chrome.storage.session.get(['job:' + id, 'render:' + id]);
+    const status = stored['job:' + id] as JobStatus | undefined;
+    const render = stored['render:' + id] as ReturnType<typeof renderSnapshot> | undefined;
+    if (
+      !status ||
+      !render?.cues.length ||
+      status.epoch !== render.epoch ||
+      status.busy ||
+      status.stage === 'retry' ||
+      status.stage === 'waiting-player'
+    )
+      continue;
+    const frames = await videoFrames(id);
+    const latest = await chrome.storage.session.get(['epoch:' + id, 'render:' + id]);
+    if (
+      jobs.has(id) ||
+      !latest['render:' + id] ||
+      (latest['epoch:' + id] !== undefined && latest['epoch:' + id] !== status.epoch)
+    )
+      continue;
+    const recovered = settleWorkClock<JobStatus>(
+      {
+        ...status,
+        japanese:
+          status.japanese?.state === 'searching'
+            ? { state: 'error', message: '일본어 검색이 중단되었습니다.' }
+            : status.japanese,
+      },
+      status.updatedAt,
+    );
+    jobs.set(id, {
+      controller: new AbortController(),
+      status: structuredClone(recovered),
+      cues: render.cues,
+      settings: structuredClone(settings),
+      primaryFrame: frames[0]?.frameId ?? 0,
+      primaryDocument: frames[0]?.documentId,
+      playbackTime: status.playbackTime ?? 0,
+      bootstrapReady: render.bootstrapReady,
+      writes: Promise.resolve(),
+      cacheKey: render.cacheKey ?? episodeCacheKey(status.context, settings, status.mode),
+      sourceLanguage: render.sourceLanguage,
+      originalCues: render.originalCues,
+      japaneseCues: render.japaneseCues,
+      japaneseSource: render.japaneseSource,
+    });
+  }
+  await Promise.allSettled(
+    [...jobs].map(async ([tabId, j]) => {
+      if (!active(tabId, j)) return;
+      j.settings.display = settings.display;
+      await sendVideoMessage(tabId, {
+        type: 'DISPLAY',
+        epoch: j.status.epoch,
+        display: settings.display,
+      });
+      if (!settings.display.showJapanese) {
+        j.japaneseController?.abort();
+        j.japaneseController = undefined;
+        await japaneseStatus(tabId, j, { state: 'off', message: '일본어 추가 자막 꺼짐' });
+      } else if (j.cues.length || j.originalCues?.length || j.japaneseCues?.length)
+        ensureJapanese(tabId, j);
+      await persistRender(tabId, j);
+    }),
+  );
+}
 export async function syncFrame(tabId: number, frameId: number) {
   const j = jobs.get(tabId);
   if (j) {
@@ -814,7 +1016,8 @@ export async function syncFrame(tabId: number, frameId: number) {
         { frameId },
       )
       .catch(() => {});
-  await chrome.tabs.sendMessage(tabId, { type: 'APPLY', ...r }, { frameId }).catch(() => {});
+  const { originalCues: _original, cacheKey: _cacheKey, ...render } = r;
+  await chrome.tabs.sendMessage(tabId, { type: 'APPLY', ...render }, { frameId }).catch(() => {});
   if (r.bootstrapReady)
     await chrome.tabs
       .sendMessage(tabId, { type: 'BOOTSTRAP_READY', epoch: r.epoch }, { frameId })

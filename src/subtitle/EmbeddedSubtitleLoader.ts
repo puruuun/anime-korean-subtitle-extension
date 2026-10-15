@@ -8,6 +8,7 @@ import { AppError } from '../utils/errors';
 export async function loadEmbeddedSource(
   source: SubtitleSource,
   signal?: AbortSignal,
+  language: 'ja' | 'en' = 'en',
 ): Promise<SubtitleCue[]> {
   if (source.cues?.length) {
     if (
@@ -30,7 +31,7 @@ export async function loadEmbeddedSource(
       throw new AppError('FORMAT', '영상·오디오 파일은 다운로드하지 않습니다.');
     return decodeSubtitle(
       new Uint8Array(await request(publicSubtitleURL(url), {}, 25000, signal, true)),
-      'en',
+      language,
     );
   };
   return source.kind === 'hls'

@@ -18,6 +18,7 @@ if (!window.__animeSubIsolatedV1) {
   let renderer: SubtitleRenderer | undefined,
     video: HTMLVideoElement | null = null,
     cues: SubtitleCue[] = [],
+    japaneseCues: SubtitleCue[] = [],
     display: DisplaySettings | undefined,
     offset = 0,
     epoch = 0,
@@ -82,11 +83,13 @@ if (!window.__animeSubIsolatedV1) {
     clearRevision++;
     finishPreparation(resume);
     cues = [];
+    japaneseCues = [];
     translationStatus = undefined;
     translationStage = undefined;
     translationMessage = undefined;
     immediatePlayback = false;
     renderer?.setCues([]);
+    renderer?.setJapaneseCues([]);
     renderer?.setImmediatePlayback(false);
     renderer?.setTranslationStatus();
   }
@@ -101,6 +104,7 @@ if (!window.__animeSubIsolatedV1) {
   }
   function configureRenderer() {
     renderer?.setCues(cues);
+    renderer?.setJapaneseCues(japaneseCues);
     renderer?.setOffset(offset);
     renderer?.setImmediatePlayback(immediatePlayback);
     renderer?.setTranslationStatus(translationStatus, translationStage, translationMessage);
@@ -263,6 +267,7 @@ if (!window.__animeSubIsolatedV1) {
         for (const cue of m.cues as SubtitleCue[]) store.set(cue.id, cue);
         cues = [...store.values()].sort((a, b) => a.startTime - b.startTime || a.id - b.id);
       }
+      if (Array.isArray(m.japaneseCues)) japaneseCues = [...m.japaneseCues];
       display = m.display ?? display;
       offset = m.offset ?? offset;
       if (typeof m.immediatePlayback === 'boolean') immediatePlayback = m.immediatePlayback;
@@ -274,6 +279,7 @@ if (!window.__animeSubIsolatedV1) {
         }
         if (m.type === 'APPEND') renderer?.addCues(m.cues);
         else renderer?.setCues(cues);
+        renderer?.setJapaneseCues(japaneseCues);
         renderer?.setOffset(offset);
         renderer?.setImmediatePlayback(immediatePlayback);
         if (display) renderer?.setDisplay(display);
@@ -292,12 +298,25 @@ if (!window.__animeSubIsolatedV1) {
       renderer?.setTranslationStatus(translationStatus, translationStage, translationMessage);
       reply({ ok: !!video });
     }
+    if (m.type === 'JAPANESE_CUES') {
+      if (!acceptEpoch(m.epoch)) {
+        reply({ ok: false });
+        return;
+      }
+      japaneseCues = Array.isArray(m.cues) ? [...m.cues] : [];
+      renderer?.setJapaneseCues(japaneseCues);
+      reply({ ok: !!video });
+    }
     if (m.type === 'OFFSET') {
       offset = m.offset;
       renderer?.setOffset(offset);
       reply({ ok: true });
     }
     if (m.type === 'DISPLAY') {
+      if (m.epoch !== undefined && !acceptEpoch(m.epoch)) {
+        reply({ ok: false });
+        return;
+      }
       display = m.display;
       if (display) renderer?.setDisplay(display);
       reply({ ok: true });

@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { AnimeContext } from '../../anime/AnimeContext';
 import type { JobStatus } from '../../background/messageRouter';
 import type { Mode } from '../../subtitle/SubtitleCore';
 import type { TranslationBufferStatus } from '../../translation/TranslationQueue';
 import { send } from '../api';
+import { workElapsedSeconds, workPending } from '../../background/jobClock';
 import '../style.css';
 const modes: { id: Mode; name: string; detail: string }[] = [
   { id: 'ko', name: '한국어 자막 검색', detail: '외부 한국어 자막을 그대로 적용' },
@@ -110,6 +111,10 @@ function Popup() {
   const [missingOrigins, setMissingOrigins] = useState<string[]>([]);
   const [working, setWorking] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [showJapanese, setShowJapanese] = useState(false);
+  const [changingJapanese, setChangingJapanese] = useState(false);
+  const japanesePending = useRef(false);
+  const japaneseRevision = useRef(0);
   function acceptContext(c: AnimeContext) {
     setContext(c);
     setTitle(c.title);
@@ -119,8 +124,13 @@ function Popup() {
   async function refresh(id: number) {
     const r = await send<{ status?: JobStatus }>({ type: 'GET_STATUS', tabId: id });
     setStatus(r.status);
-    const preferences = await send<{ mode: Mode }>({ type: 'GET_PREFERENCES' });
+    const revision = japaneseRevision.current;
+    const preferences = await send<{ mode: Mode; showJapanese: boolean }>({
+      type: 'GET_PREFERENCES',
+    });
     setMode(preferences.mode);
+    if (!japanesePending.current && revision === japaneseRevision.current)
+      setShowJapanese(preferences.showJapanese);
     const access = await send<{ missing: string[] }>({ type: 'ACCESS_STATUS', tabId: id }).catch(
       () => ({ missing: [] }),
     );
@@ -240,6 +250,25 @@ function Popup() {
     }
   }
   const busy = working || !!status?.busy;
+  async function changeJapanese(enabled: boolean) {
+    const previous = showJapanese;
+    japanesePending.current = true;
+    japaneseRevision.current++;
+    setShowJapanese(enabled);
+    setChangingJapanese(true);
+    setError('');
+    try {
+      const r = await send<{ showJapanese: boolean }>({ type: 'SET_JAPANESE', enabled });
+      setShowJapanese(r.showJapanese);
+      if (tabId !== undefined) await refresh(tabId);
+    } catch (e) {
+      setShowJapanese(previous);
+      setError((e as Error).message);
+    } finally {
+      japanesePending.current = false;
+      setChangingJapanese(false);
+    }
+  }
   return (
     <main className="popup">
       <section className="work-status" role="status" aria-live="polite" aria-label="현재 작업 상태">
@@ -270,7 +299,9 @@ function Popup() {
           }
         >
           <span className="status-dot" />
-          {stageLabel(status?.stage, mode)}
+          {status?.stage === 'done' && status.japanese?.state === 'searching'
+            ? '한국어 적용 완료 · 일본어 찾는 중'
+            : stageLabel(status?.stage, mode)}
         </p>
         <p className="work-message">
           {error ||
@@ -310,6 +341,15 @@ function Popup() {
           </button>
         )}
         {status?.progress && <progress value={status.progress.done} max={status.progress.total} />}
+        {showJapanese && (
+          <small className="japanese-status" data-state={status?.japanese?.state ?? 'off'}>
+            추가 자막:{' '}
+            {status?.japanese?.state === 'off' || !status?.japanese
+              ? '일본어 원문 준비 대기'
+              : status.japanese.message}
+            {status?.japanese?.source ? ' · ' + status.japanese.source : ''}
+          </small>
+        )}
         {status?.translation ? (
           <TranslationStatus translation={status.translation} busy={!!status.busy} />
         ) : (
@@ -320,12 +360,41 @@ function Popup() {
             </div>
             <div>
               <dt>작업 경과</dt>
-              <dd>{clockTime(status?.startedAt ? (Date.now() - status.startedAt) / 1000 : 0)}</dd>
+              <dd data-work-elapsed="true">
+                {clockTime(workElapsedSeconds(status))}
+                {status?.startedAt && !workPending(status) ? ' · 종료' : ''}
+              </dd>
+            </div>
+          </dl>
+        )}
+        {status?.translation && (
+          <dl className="work-metrics">
+            <div>
+              <dt>작업 경과</dt>
+              <dd data-work-elapsed="true">
+                {clockTime(workElapsedSeconds(status))}
+                {!workPending(status) ? ' · 종료' : ''}
+              </dd>
             </div>
           </dl>
         )}
       </section>
       <div className="popup-body">
+        <section className="additional-subtitle">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={showJapanese}
+              disabled={changingJapanese}
+              onChange={(e) => void changeJapanese(e.target.checked)}
+            />
+            일본어 원문 함께 보기
+          </label>
+          <p className="muted">
+            한국어 아래에 일본어 추가 자막을 표시합니다. 글자 크기와 일본어 싱크는 설정에서
+            조절하세요.
+          </p>
+        </section>
         <section className="anime">
           <div className="row">
             <span className="badge">{context?.site === 'reanime' ? 'Re:ANIME' : 'Miruro'}</span>

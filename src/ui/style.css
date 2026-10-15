@@ -255,6 +255,19 @@ a {
 .work-status .translation-buffer small:last-child:not(.error) {
   display: none;
 }
+.japanese-status {
+  display: block;
+  color: #c7d9ff;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 8px 0;
+}
+.additional-subtitle .check {
+  margin: 0;
+}
+.additional-subtitle p {
+  margin-bottom: 0;
+}
 .work-status .translation-state {
   font-size: 11px;
 }

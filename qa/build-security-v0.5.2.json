@@ -1,0 +1,12 @@
+{
+  "version": "0.5.2",
+  "passed": true,
+  "releaseBuildKeyIncluded": false,
+  "testTokenIncluded": false,
+  "privateAndPublicScriptsIdentical": true,
+  "personalRequiredAllUrls": true,
+  "newHostPermissions": false,
+  "unitTestsPassed": 242,
+  "runtimePermissionRequests": 0,
+  "browserScenariosPassed": 128
+}

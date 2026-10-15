@@ -12,6 +12,7 @@ import {
   episodeReady,
   episodeNavigating,
   preferencesChanged,
+  displayPreferencesChanged,
 } from './messageRouter';
 import { getSettings, saveSettings, validateSettings, type Settings } from '../storage/settings';
 import { setOffset } from '../storage/offsets';
@@ -87,8 +88,18 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
         return { ok: true };
       case 'GET_STATUS':
         return { ok: true, status: await currentStatus(m.tabId) };
-      case 'GET_PREFERENCES':
-        return { ok: true, mode: (await getSettings()).mode };
+      case 'GET_PREFERENCES': {
+        const s = await getSettings();
+        return { ok: true, mode: s.mode, showJapanese: s.display.showJapanese };
+      }
+      case 'SET_JAPANESE': {
+        if (typeof m.enabled !== 'boolean') throw Error('추가 자막 설정을 확인하세요.');
+        const s = await getSettings();
+        s.display.showJapanese = m.enabled;
+        await saveSettings(s);
+        await displayPreferencesChanged();
+        return { ok: true, showJapanese: s.display.showJapanese };
+      }
       case 'SET_MODE': {
         const settings = await getSettings();
         settings.mode = m.mode;
@@ -111,6 +122,8 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
         const next = await getSettings();
         if (previous.mode !== next.mode || previous.autoApply !== next.autoApply)
           await preferencesChanged();
+        else if (JSON.stringify(previous.display) !== JSON.stringify(next.display))
+          await displayPreferencesChanged();
         return { ok: true };
       }
       case 'ACCESS_STATUS': {

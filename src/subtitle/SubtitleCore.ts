@@ -20,6 +20,7 @@ export interface CoreStatus {
   translation?: TranslationBufferStatus;
 }
 export interface ProgressiveHooks {
+  onSource?: (result: PipelineResult) => void | Promise<void>;
   onStart: (
     cues: SubtitleCue[],
     language: 'ja' | 'en',
@@ -106,6 +107,8 @@ export class SubtitleCore {
       ).resolve(c, mode, selected));
     this.signal.throwIfAborted();
     this.source = result.source;
+    await this.progressive?.onSource?.(result);
+    this.signal.throwIfAborted();
     if (result.language === 'ko') {
       this.status({
         stage: 'source',
