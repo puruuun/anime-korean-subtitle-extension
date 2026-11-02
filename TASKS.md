@@ -33,3 +33,4 @@
 | :--- | :---: | :--- | :--- | :--- |
 | **TASK-009** | `[x] Done` | **플레이어 키보드 단축키 지원 (싱크 ±0.5s 조절 및 일본어 자막 토글)** | `src/content/shortcuts.ts`, `src/content/contentScript.ts`, `src/background/serviceWorker.ts`, `src/ui/popup/main.tsx`, `tests/shortcuts.test.ts` | 옵션 A 확정: `Alt+[`, `Alt+]`, `Alt+\`, `Alt+J` |
 | **TASK-010** | `[x] Done` | **`messageRouter.ts` 책임 분리 리팩토링** | `src/background/messageRouter.ts`, `src/background/routerTypes.ts`, `src/background/japaneseCoordinator.ts` | 1,070줄 단일 파일을 타입/스냅샷 및 일본어 트랙 코디네이터로 모듈화 |
+| **TASK-011** | `[x] Done` | **GitHub Actions CI/Release 워크플로우 구축 및 Git 작성자(Contributors) 규칙 명시** | `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `AGENTS.md`, `TASKS.md` | CI 자동 검증 및 정식 배포 자동화, 단일 작성자(puruuun) 불변 규칙 확립 |

@@ -42,7 +42,11 @@
      - `npm.cmd run typecheck` (`tsc --noEmit` 에러 0건)
      - `npm.cmd test` (`vitest run` 전체 단위 테스트 통과)
      - `npm.cmd run build:personal` 및 `npm.cmd run build:public` (두 배포 타겟 모두 빌드 성공)
-5. **감독 최종 검수 (Final Review) 및 사용자 승인**
+5. **Git 작성자(Contributors) 단일화 규칙**
+   - 모든 Git 커밋 및 태그의 Author / Committer는 반드시 프로젝트 소유자인 `puruuun <188972188+puruuun@users.noreply.github.com>`으로 설정해야 하며, AI 에이전트 이름(`Codex`, `Claude`, `Gemini` 등)이나 `Co-authored-by:` 트레일러를 절대 포함하지 않습니다.
+6. **GitHub Actions CI/Release 연동**
+   - 로컬 Quality Gate 통과 후 원격 반영 시 `.github/workflows/ci.yml`(자동 품질 관문) 및 `.github/workflows/release.yml`(정식 Release `.zip` 패키징 및 `updates.ts` 연동)과 일관성을 유지합니다.
+7. **감독 최종 검수 (Final Review) 및 사용자 승인**
    - 서브에이전트가 작업을 완료하면 총괄 감독(Argon)이 직접 `git diff`와 테스트 결과를 검수한 뒤 사용자에게 보고하고 승인을 받아 반영합니다.
 
 ---

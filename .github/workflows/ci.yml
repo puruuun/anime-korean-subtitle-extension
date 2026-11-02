@@ -1,0 +1,59 @@
+name: Quality Gate CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build personal target
+        run: |
+          npm run build:personal
+          mkdir -p dist_archive/personal
+          cp -r dist/* dist_archive/personal/
+
+      - name: Build public target
+        run: |
+          npm run build:public
+          mkdir -p dist_archive/public
+          cp -r dist/* dist_archive/public/
+          rm -rf dist
+          mkdir -p dist
+          mv dist_archive/personal dist/personal
+          mv dist_archive/public dist/public
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: anime-korean-subtitle-dist
+          path: dist/
+          retention-days: 7
