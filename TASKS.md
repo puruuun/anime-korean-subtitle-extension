@@ -31,5 +31,5 @@
 
 | Task ID | 상태 | 작업 제목 | 대상 파일 | 비고 |
 | :--- | :---: | :--- | :--- | :--- |
-| **TASK-009** | `[ ] Todo` | **플레이어 키보드 단축키 지원 (싱크 ±0.5s 조절 및 일본어 자막 토글)** | `src/content/contentScript.ts`, `src/storage/settings.ts`, `src/ui/settings/main.tsx` | 착수 전 단축키 키 바인딩 사용자 의사결정 필요 |
-| **TASK-010** | `[ ] Todo` | **`messageRouter.ts` 책임 분리 리팩토링** | `src/background/messageRouter.ts` 및 하위 모듈 | 1,070줄 단일 파일을 Job/AutoRetry/JapaneseCoordinator 등으로 모듈화 |
+| **TASK-009** | `[x] Done` | **플레이어 키보드 단축키 지원 (싱크 ±0.5s 조절 및 일본어 자막 토글)** | `src/content/shortcuts.ts`, `src/content/contentScript.ts`, `src/background/serviceWorker.ts`, `src/ui/popup/main.tsx`, `tests/shortcuts.test.ts` | 옵션 A 확정: `Alt+[`, `Alt+]`, `Alt+\`, `Alt+J` |
+| **TASK-010** | `[x] Done` | **`messageRouter.ts` 책임 분리 리팩토링** | `src/background/messageRouter.ts`, `src/background/routerTypes.ts`, `src/background/japaneseCoordinator.ts` | 1,070줄 단일 파일을 타입/스냅샷 및 일본어 트랙 코디네이터로 모듈화 |
