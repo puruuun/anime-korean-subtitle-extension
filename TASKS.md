@@ -20,10 +20,10 @@
 
 | Task ID | 상태 | 작업 제목 | 대상 파일 | 비고 |
 | :--- | :---: | :--- | :--- | :--- |
-| **TASK-005** | `[ ] Todo` | **HLS 자막 세그먼트 제한적 병렬 다운로드 도입** | `src/subtitle/HLSSubtitles.ts`, `tests/subtitle.test.ts` | 세그먼트 직렬 로드 병목 해소 (10초 데드라인 내 안정적 처리) |
-| **TASK-006** | `[ ] Todo` | **IndexedDB 캐시 만료 항목 정리(Eviction/GC) 메커니즘 추가** | `src/storage/database.ts`, `src/subtitle/EpisodeCache.ts`, `src/subtitle/SubtitleCache.ts`, `src/translation/TranslationCache.ts` | 만료된 캐시 및 오래된 항목 정리로 스토리지 무한 증가 방지 |
-| **TASK-007** | `[ ] Todo` | **`SubtitleRenderer` 프레임 렌더링 및 Cue 탐색 최적화** | `src/subtitle/SubtitleRenderer.ts`, `tests/renderer.test.ts` | 불필요한 DOM 스타일 재할당 최소화 및 정렬된 Cue 탐색 최적화 |
-| **TASK-008** | `[ ] Todo` | **팝업(Popup) 상태 폴링 경량화** | `src/ui/popup/main.tsx` | 1초 주기 폴링 시 불필요한 `ACCESS_STATUS` / `GET_PREFERENCES` 중복 호출 분리 |
+| **TASK-005** | `[x] Done` | **HLS 자막 세그먼트 제한적 병렬 다운로드 도입** | `src/subtitle/HLSSubtitles.ts`, `tests/subtitle.test.ts` | 세그먼트 직렬 로드 병목 해소 (10초 데드라인 내 안정적 처리) |
+| **TASK-006** | `[x] Done` | **IndexedDB 캐시 만료 항목 정리(Eviction/GC) 메커니즘 추가** | `src/storage/database.ts`, `src/subtitle/EpisodeCache.ts`, `src/subtitle/SubtitleCache.ts`, `tests/episodeCache.test.ts` | 만료된 캐시 및 오래된 항목 정리로 스토리지 무한 증가 방지 |
+| **TASK-007** | `[x] Done` | **`SubtitleRenderer` 프레임 렌더링 및 Cue 탐색 최적화** | `src/subtitle/SubtitleRenderer.ts`, `tests/renderer.test.ts` | 불필요한 DOM 스타일 재할당 최소화 및 정렬된 Cue 탐색 최적화 |
+| **TASK-008** | `[x] Done` | **팝업(Popup) 상태 폴링 경량화** | `src/ui/popup/main.tsx` | 1초 주기 폴링 시 불필요한 `ACCESS_STATUS` / `GET_PREFERENCES` 중복 호출 분리 |
 
 ---
 

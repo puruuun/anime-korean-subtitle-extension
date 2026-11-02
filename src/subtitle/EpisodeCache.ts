@@ -38,9 +38,12 @@ export function episodeCacheKey(c: AnimeContext, s: Settings, mode: Settings['mo
 export class EpisodeCache {
   async get(key: string) {
     const value = await database.get<EpisodeSnapshot>(key).catch(() => undefined);
-    return value && value.expiresAt > Date.now() && value.cues.length && value.source
-      ? value
-      : undefined;
+    if (!value) return undefined;
+    if (value.expiresAt <= Date.now()) {
+      await database.delete(key).catch(() => {});
+      return undefined;
+    }
+    return value.cues.length && value.source ? value : undefined;
   }
   put(key: string, value: Omit<EpisodeSnapshot, 'expiresAt'>) {
     return database.put(key, { ...value, expiresAt: Date.now() + 86400000 }).catch(() => {});

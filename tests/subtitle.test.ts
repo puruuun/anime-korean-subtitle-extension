@@ -125,6 +125,55 @@ describe('subtitle formats and matching', () => {
     });
   });
 
+  it('limits concurrency to 6 for HLS segments and preserves cue order and X-TIMESTAMP-MAP offset despite out-of-order completion', async () => {
+    const segmentCount = 12;
+    const playlist = [
+      '#EXTM3U',
+      '#EXT-X-TARGETDURATION:1',
+      ...Array.from({ length: segmentCount }, (_, i) => `#EXTINF:1.0,\nseg${i}.vtt`),
+    ].join('\n');
+
+    let activeRequests = 0;
+    let maxConcurrency = 0;
+
+    const mockLoad = async (url: string) => {
+      if (url === 'https://example.com/subs.m3u8') return playlist;
+      const match = url.match(/seg(\d+)\.vtt$/);
+      if (!match) throw new Error(`Unexpected url: ${url}`);
+      const index = Number(match[1]);
+
+      activeRequests++;
+      maxConcurrency = Math.max(maxConcurrency, activeRequests);
+
+      // Reorder completions: higher index resolves faster
+      const delay = (segmentCount - index) * 5;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      activeRequests--;
+
+      const mpegTs = 90000 * (index + 1);
+      return [
+        'WEBVTT',
+        `X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:${mpegTs}`,
+        '',
+        '00:00:00.000 --> 00:00:01.000',
+        `Line ${index}`,
+      ].join('\n');
+    };
+
+    const cues = await loadHLSSubtitles('https://example.com/subs.m3u8', mockLoad);
+
+    expect(maxConcurrency).toBeGreaterThan(1);
+    expect(maxConcurrency).toBeLessThanOrEqual(6);
+    expect(cues).toHaveLength(segmentCount);
+
+    for (let i = 0; i < segmentCount; i++) {
+      expect(cues[i].text).toBe(`Line ${i}`);
+      expect(cues[i].startTime).toBe(i);
+      expect(cues[i].endTime).toBe(i + 1);
+    }
+  });
+
   it('rejects invalid data', () => {
     expect(() => parseSubtitle('<html>error</html>')).toThrow();
     expect(() => decodeSubtitle(new Uint8Array([0xff, 0xfe, 0, 0]))).toThrow();

@@ -6,7 +6,12 @@ interface DownloadEntry {
 export class SubtitleCache {
   async get(key: string) {
     const cached = await database.get<DownloadEntry>('download:' + key);
-    return cached && Date.now() - cached.at < 86400000 ? cached.data : undefined;
+    if (!cached) return undefined;
+    if (Date.now() - cached.at >= 86400000) {
+      await database.delete('download:' + key).catch(() => {});
+      return undefined;
+    }
+    return cached.data;
   }
   put(key: string, data: ArrayBuffer) {
     return database.put('download:' + key, { data, at: Date.now() });

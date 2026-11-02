@@ -121,20 +121,22 @@ function Popup() {
     setEpisode(String(c.episode));
     setSeason(c.season ? String(c.season) : '');
   }
-  async function refresh(id: number) {
+  async function refresh(id: number, full = false) {
     const r = await send<{ status?: JobStatus }>({ type: 'GET_STATUS', tabId: id });
     setStatus(r.status);
-    const revision = japaneseRevision.current;
-    const preferences = await send<{ mode: Mode; showJapanese: boolean }>({
-      type: 'GET_PREFERENCES',
-    });
-    setMode(preferences.mode);
-    if (!japanesePending.current && revision === japaneseRevision.current)
-      setShowJapanese(preferences.showJapanese);
-    const access = await send<{ missing: string[] }>({ type: 'ACCESS_STATUS', tabId: id }).catch(
-      () => ({ missing: [] }),
-    );
-    setMissingOrigins(access.missing);
+    if (full) {
+      const revision = japaneseRevision.current;
+      const preferences = await send<{ mode: Mode; showJapanese: boolean }>({
+        type: 'GET_PREFERENCES',
+      });
+      setMode(preferences.mode);
+      if (!japanesePending.current && revision === japaneseRevision.current)
+        setShowJapanese(preferences.showJapanese);
+      const access = await send<{ missing: string[] }>({ type: 'ACCESS_STATUS', tabId: id }).catch(
+        () => ({ missing: [] }),
+      );
+      setMissingOrigins(access.missing);
+    }
     if (r.status) {
       setOffset(r.status.offset ?? 0);
       if (r.status.context) setContext(r.status.context);
@@ -167,9 +169,9 @@ function Popup() {
               '영상 페이지를 새로고침하세요. 연결되지 않으면 Chrome 확장 세부정보의 사이트 접근을 확인하세요.',
           );
         }
-        await refresh(t.id);
+        await refresh(t.id, true);
         timer = setInterval(() => {
-          if (!stopped) void refresh(t.id!).catch(() => {});
+          if (!stopped) void refresh(t.id!, false).catch(() => {});
         }, 1000);
       } catch (e) {
         setError((e as Error).message);
@@ -244,7 +246,7 @@ function Popup() {
     setError('');
     try {
       await send({ type: 'SET_MODE', mode: next });
-      if (tabId !== undefined) await refresh(tabId);
+      if (tabId !== undefined) await refresh(tabId, true);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -260,7 +262,7 @@ function Popup() {
     try {
       const r = await send<{ showJapanese: boolean }>({ type: 'SET_JAPANESE', enabled });
       setShowJapanese(r.showJapanese);
-      if (tabId !== undefined) await refresh(tabId);
+      if (tabId !== undefined) await refresh(tabId, true);
     } catch (e) {
       setShowJapanese(previous);
       setError((e as Error).message);

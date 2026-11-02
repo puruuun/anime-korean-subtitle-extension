@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { SubtitleRenderer, defaultDisplay } from '../src/subtitle/SubtitleRenderer';
+import { SubtitleRenderer, defaultDisplay, activeAt } from '../src/subtitle/SubtitleRenderer';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -264,6 +264,105 @@ describe('renderer lifecycle', () => {
     expect(root().querySelector('.translation-status')?.textContent).not.toContain('번역 중');
     renderer.setTranslationStatus(status, 'interrupted');
     expect(root().querySelector('.translation-status')?.textContent).toContain('번역 중단');
+    renderer.destroy();
+  });
+  it('optimizes active cue lookup with binary search (activeAt) over 1000 cues and handles overlapping intervals', () => {
+    const cues = Array.from({ length: 1000 }, (_, i) => ({
+      id: i + 1,
+      startTime: i * 2,
+      endTime: i * 2 + 3,
+      text: `자막 ${i + 1}`,
+    }));
+
+    // Before any cue starts
+    expect(activeAt(cues, -1)).toEqual([]);
+
+    // Single active cue at t = 21 (cue 11: 20..23, cue 12: 22..25)
+    const single = activeAt(cues, 21);
+    expect(single.map((c) => c.id)).toEqual([11]);
+
+    // Overlapping active cues at t = 22.5 (cue 11: 20..23, cue 12: 22..25)
+    const overlapping = activeAt(cues, 22.5);
+    expect(overlapping.map((c) => c.id)).toEqual([11, 12]);
+
+    // After all cues have ended
+    expect(activeAt(cues, 5000)).toEqual([]);
+
+    // Verify integration with SubtitleRenderer
+    const { renderer, video, root } = fixture();
+    renderer.setCues(cues);
+    video.currentTime = 22.5;
+    video.dispatchEvent(new Event('seeked'));
+    expect(root().querySelector('.primary-subtitle')?.textContent).toBe('자막 11\n자막 12');
+
+    video.currentTime = 21;
+    video.dispatchEvent(new Event('seeked'));
+    expect(root().querySelector('.primary-subtitle')?.textContent).toBe('자막 11');
+    renderer.destroy();
+  });
+
+  it('skips redundant DOM style updates when getBoundingClientRect is unchanged and updates immediately on rect change', () => {
+    let rect = {
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 640,
+      bottom: 360,
+      width: 640,
+      height: 360,
+      toJSON() {},
+    };
+    vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(1);
+    document.body.innerHTML = '<video></video>';
+    const video = document.querySelector('video')!;
+    vi.spyOn(video, 'getBoundingClientRect').mockImplementation(() => rect);
+
+    let hostElement: HTMLElement | undefined;
+    const originalCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation(((tag: string, ...args: unknown[]) => {
+      const el = originalCreateElement(tag, ...(args as []));
+      if (tag === 'div' && !hostElement) {
+        hostElement = el;
+      }
+      return el;
+    }) as typeof document.createElement);
+
+    const renderer = new SubtitleRenderer(video);
+    expect(hostElement).toBeDefined();
+    expect(hostElement!.style.width).toBe('640px');
+    expect(hostElement!.style.height).toBe('360px');
+
+    const styleSpy = vi.spyOn(hostElement!.style, 'left', 'set');
+
+    // Trigger timeupdate with same rect: should not update host style
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(styleSpy).not.toHaveBeenCalled();
+
+    // Change rect: should update host style
+    rect = {
+      x: 50,
+      y: 60,
+      left: 50,
+      top: 60,
+      right: 850,
+      bottom: 510,
+      width: 800,
+      height: 450,
+      toJSON() {},
+    };
+    window.dispatchEvent(new Event('resize'));
+    expect(styleSpy).toHaveBeenCalledWith('50px');
+    expect(hostElement!.style.left).toBe('50px');
+    expect(hostElement!.style.top).toBe('60px');
+    expect(hostElement!.style.width).toBe('800px');
+    expect(hostElement!.style.height).toBe('450px');
+
+    // Relocating should reset lastRect and re-apply styles on next render
+    styleSpy.mockClear();
+    document.dispatchEvent(new Event('fullscreenchange'));
+    expect(styleSpy).toHaveBeenCalledWith('50px');
+
     renderer.destroy();
   });
 });
