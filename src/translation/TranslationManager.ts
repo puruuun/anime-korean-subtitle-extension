@@ -5,6 +5,7 @@ import type { TranslationProvider, TranslationCue, TranslatedCue } from './Trans
 import { validateTranslations } from './TranslationProvider';
 import { TranslationCache, translationKey, type TranslationStore } from './TranslationCache';
 import { subtitleHash } from '../subtitle/SubtitleCache';
+import { animeContextTitle } from './prompts';
 import { retry } from '../utils/retry';
 import { AppError } from '../utils/errors';
 import { log } from '../utils/logger';
@@ -55,6 +56,7 @@ export class TranslationManager {
     }
     const chunks = chunkCues(cues, this.config.chunkSize, this.config.maxCharacters);
     const output: TranslatedCue[] = [];
+    const animeTitle = animeContextTitle(context);
     let index = 0;
     for (let i = 0; i < chunks.length; i++) {
       signal?.throwIfAborted();
@@ -62,13 +64,10 @@ export class TranslationManager {
       const previousContext = cues
         .slice(Math.max(0, index - this.config.contextCues), index)
         .map(({ id, text }) => ({ id, text }));
-      const previousTranslations = output.slice(
-        Math.max(0, output.length - this.config.contextCues),
-      );
       const partKey =
         key +
         ':chunk:' +
-        (await subtitleHash(JSON.stringify({ input, previousContext, previousTranslations })));
+        (await subtitleHash(JSON.stringify({ input, previousContext })));
       onProgress(i, chunks.length);
       let part = await this.cache.get<TranslatedCue[]>(partKey);
       if (part) part = validateTranslations(input, part);
@@ -78,7 +77,7 @@ export class TranslationManager {
             const raw = await this.provider.translate(input, {
               sourceLanguage: language,
               previousContext,
-              previousTranslations,
+              ...(animeTitle ? { animeTitle } : {}),
               signal,
             });
             try {

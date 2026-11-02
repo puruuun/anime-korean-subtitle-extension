@@ -43,7 +43,7 @@ export function parseSubtitle(raw: string, format?: string): SubtitleCue[] {
       const current = syncs[i];
       const next = syncs[i + 1];
       const startTime = Number(current[1]) / 1000;
-      const endTime = next ? Number(next[1]) / 1000 : startTime + 4;
+      const endTime = next ? Math.min(Number(next[1]) / 1000, startTime + 7) : startTime + 4;
       const block = clean.slice(current.index! + current[0].length, next?.index ?? clean.length);
       const paragraphs = [...block.matchAll(/<p\b([^>]*)>([\s\S]*?)(?=<p\b|$)/gi)];
       const chosen =
@@ -95,6 +95,7 @@ export function parseSubtitle(raw: string, format?: string): SubtitleCue[] {
         cells
           .slice(ti)
           .join(',')
+          .replace(/\{[^}]*\\p[1-9]\d*[^}]*\}[\s\S]*?(?:\{[^}]*\\p0[^}]*\}|$)/g, '')
           .replace(/\{[^}]*\}/g, '')
           .replace(/\\[Nn]/g, '\n')
           .replace(/\\h/g, ' '),

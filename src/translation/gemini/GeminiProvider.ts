@@ -44,8 +44,8 @@ export class GeminiProvider implements TranslationProvider {
               parts: [
                 {
                   text: JSON.stringify({
+                    ...(options.animeTitle ? { animeTitle: options.animeTitle } : {}),
                     previousContext: options.previousContext,
-                    previousTranslations: options.previousTranslations ?? [],
                     toTranslate: cues.map(({ id, text }) => ({ id, text })),
                   }),
                 },
