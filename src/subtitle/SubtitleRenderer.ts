@@ -20,6 +20,31 @@ export const defaultDisplay: DisplaySettings = {
   japaneseFontSize: 22,
   japaneseOffset: 0,
 };
+export function activeAt(cues: SubtitleCue[], t: number): SubtitleCue[] {
+  const len = cues.length;
+  if (len === 0) return [];
+  let low = 0;
+  let high = len - 1;
+  let lastMatch = -1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (cues[mid].startTime <= t) {
+      lastMatch = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  if (lastMatch === -1) return [];
+  const active: SubtitleCue[] = [];
+  for (let i = 0; i <= lastMatch; i++) {
+    const c = cues[i];
+    if (t < c.endTime) {
+      active.push(c);
+    }
+  }
+  return active;
+}
 function timeLabel(seconds: number) {
   const total = Math.max(0, Math.floor(seconds));
   return (
@@ -45,6 +70,7 @@ export class SubtitleRenderer {
   private disposed = false;
   private display = defaultDisplay;
   private last = '';
+  private lastRect = '';
   private immediatePlayback = false;
   private originalTrackModes = new Map<TextTrack, TextTrackMode>();
   private translationStatus: TranslationBufferStatus | undefined;
@@ -181,6 +207,7 @@ export class SubtitleRenderer {
       's';
   }
   private relocate = () => {
+    this.lastRect = '';
     const full = document.fullscreenElement;
     (full && full !== this.video ? full : (document.body ?? document.documentElement)).append(
       this.host,
@@ -227,16 +254,18 @@ export class SubtitleRenderer {
   private render = () => {
     if (this.disposed) return;
     const r = this.video.getBoundingClientRect();
-    this.host.style.left = r.left + 'px';
-    this.host.style.top = r.top + 'px';
-    this.host.style.width = r.width + 'px';
-    this.host.style.height = r.height + 'px';
+    const rectKey = `${r.left},${r.top},${r.width},${r.height}`;
+    if (rectKey !== this.lastRect) {
+      this.lastRect = rectKey;
+      this.host.style.left = r.left + 'px';
+      this.host.style.top = r.top + 'px';
+      this.host.style.width = r.width + 'px';
+      this.host.style.height = r.height + 'px';
+    }
     const t = this.video.currentTime + this.offset;
-    const active = this.cues.filter((c) => c.startTime <= t && t < c.endTime);
+    const active = activeAt(this.cues, t);
     const jt = t + this.display.japaneseOffset;
-    const japanese = this.display.showJapanese
-      ? this.japaneseCues.filter((c) => c.startTime <= jt && jt < c.endTime)
-      : [];
+    const japanese = this.display.showJapanese ? activeAt(this.japaneseCues, jt) : [];
     this.updateSourceTracks(active.length > 0 || japanese.length > 0);
     this.renderStatus();
     const text = active

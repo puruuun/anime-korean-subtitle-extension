@@ -49,15 +49,29 @@ export async function loadHLSSubtitles(
     .map((l) => new URL(l.trim(), url).href);
   if (!segments.length || segments.length > 500)
     throw new AppError('HLS', 'HLS 자막 세그먼트 수가 지원 범위를 벗어났습니다.');
+
+  for (const segment of segments) {
+    if (/\.(?:ts|mp4|m4s|aac|mp3|webm)(?:[?#]|$)/i.test(segment))
+      throw new AppError('HLS', '영상·오디오 세그먼트는 다운로드하지 않습니다.');
+  }
+
+  const rawSegments = new Array<string>(segments.length);
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(6, segments.length) }, async () => {
+      while (nextIndex < segments.length) {
+        signal?.throwIfAborted();
+        const i = nextIndex++;
+        rawSegments[i] = await load(segments[i]);
+      }
+    }),
+  );
+
   const cues: SubtitleCue[] = [];
   let start = 0,
     firstMpeg: number | undefined;
   const seen = new Set<string>();
-  for (const segment of segments) {
-    signal?.throwIfAborted();
-    if (/\.(?:ts|mp4|m4s|aac|mp3|webm)(?:[?#]|$)/i.test(segment))
-      throw new AppError('HLS', '영상·오디오 세그먼트는 다운로드하지 않습니다.');
-    const raw = await load(segment);
+  for (const raw of rawSegments) {
     if (!/^\uFEFF?WEBVTT/.test(raw))
       throw new AppError(
         'HLS',
