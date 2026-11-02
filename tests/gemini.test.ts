@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GeminiProvider } from '../src/translation/gemini/GeminiProvider';
 import { defaultSettings } from '../src/storage/settings';
 import { translationKey } from '../src/translation/TranslationCache';
-import { systemPrompt } from '../src/translation/prompts';
+import { animeContextTitle, systemPrompt } from '../src/translation/prompts';
 const config = {
   ...defaultSettings.translation,
   provider: 'gemini' as const,
@@ -22,7 +22,11 @@ describe('Gemini reuses the translation contract', () => {
       vi.stubGlobal('fetch', fetch);
       const cues = [{ id: 10, text: sourceLanguage === 'ja' ? 'こんにちは' : 'Hello' }];
       expect(
-        await new GeminiProvider(config).translate(cues, { sourceLanguage, previousContext: [] }),
+        await new GeminiProvider(config).translate(cues, {
+          sourceLanguage,
+          previousContext: [],
+          animeTitle: 'Test Anime',
+        }),
       ).toEqual([{ id: 10, text: '안녕' }]);
       const [url, request] = (fetch.mock.calls as unknown as [string, RequestInit][])[0];
       expect(url).toBe(
@@ -31,10 +35,39 @@ describe('Gemini reuses the translation contract', () => {
       expect(request.headers).toMatchObject({ 'x-goog-api-key': 'fake-gemini-key' });
       const body = JSON.parse(String(request.body));
       expect(body.systemInstruction.parts[0].text).toBe(systemPrompt(sourceLanguage));
-      expect(JSON.parse(body.contents[0].parts[0].text).toTranslate).toEqual(cues);
+      const payload = JSON.parse(body.contents[0].parts[0].text);
+      expect(payload.toTranslate).toEqual(cues);
+      expect(payload.animeTitle).toBe('Test Anime');
+      expect(payload.previousTranslations).toBeUndefined();
       expect(body.generationConfig.responseJsonSchema.required).toEqual(['translations']);
     },
   );
+  it('omits animeTitle when not provided', async () => {
+    const fetch = vi.fn(async () => response('{"translations":[{"id":10,"text":"안녕"}]}'));
+    vi.stubGlobal('fetch', fetch);
+    const cues = [{ id: 10, text: 'Hello' }];
+    await new GeminiProvider(config).translate(cues, {
+      sourceLanguage: 'en',
+      previousContext: [],
+    });
+    const [, request] = (fetch.mock.calls as unknown as [string, RequestInit][])[0];
+    const body = JSON.parse(String(request.body));
+    const payload = JSON.parse(body.contents[0].parts[0].text);
+    expect(payload.animeTitle).toBeUndefined();
+    expect(payload.previousTranslations).toBeUndefined();
+  });
+  it('formats animeContextTitle deduplicating and trimming titles', () => {
+    expect(animeContextTitle()).toBeUndefined();
+    expect(
+      animeContextTitle({
+        koreanTitle: ' 귀멸의 칼날 ',
+        title: 'Kimetsu no Yaiba',
+        nativeTitle: '鬼滅の刃',
+        englishTitle: 'Demon Slayer',
+        romajiTitle: 'Kimetsu no Yaiba',
+      }),
+    ).toBe('귀멸의 칼날 / Kimetsu no Yaiba / 鬼滅の刃 / Demon Slayer');
+  });
   it.each(['{"translations":[]}', '{"translations":[{"id":999,"text":"안녕"}]}', 'not JSON'])(
     'rejects malformed or mismatched translation %s',
     async (text) => {

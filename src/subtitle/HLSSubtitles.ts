@@ -7,7 +7,15 @@ export function hlsAttributes(line: string): Record<string, string> {
     out[m[1]] = m[2].replace(/^"|"$/g, '');
   return out;
 }
-export function englishRenditions(manifest: string, base: string) {
+export function subtitleRenditions(
+  manifest: string,
+  base: string,
+  language: 'ja' | 'en' = 'en',
+) {
+  const pattern =
+    language === 'ja'
+      ? /^(ja(?:[-_].*)?|jpn|japanese|日本語)/i
+      : /^(en(?:-.*)?|eng|english)/i;
   return manifest
     .split(/\r?\n/)
     .filter((l) => l.startsWith('#EXT-X-MEDIA:'))
@@ -16,20 +24,24 @@ export function englishRenditions(manifest: string, base: string) {
       (a) =>
         a.TYPE === 'SUBTITLES' &&
         a.URI &&
-        /^(en(?:-.*)?|eng|english)/i.test(a.LANGUAGE ?? a.NAME ?? ''),
+        pattern.test(a.LANGUAGE ?? a.NAME ?? ''),
     )
     .map((a) => new URL(a.URI, base).href);
+}
+export function englishRenditions(manifest: string, base: string) {
+  return subtitleRenditions(manifest, base, 'en');
 }
 export async function loadHLSSubtitles(
   url: string,
   load: (url: string) => Promise<string>,
   signal?: AbortSignal,
+  language: 'ja' | 'en' = 'en',
 ): Promise<SubtitleCue[]> {
   const text = await load(url);
   if (!text.startsWith('#EXTM3U'))
     throw new AppError('HLS', '자막 HLS manifest를 읽을 수 없습니다.');
-  const variants = englishRenditions(text, url);
-  if (variants.length) return loadHLSSubtitles(variants[0], load, signal);
+  const variants = subtitleRenditions(text, url, language);
+  if (variants.length) return loadHLSSubtitles(variants[0], load, signal, language);
   // Only a playlist already identified as TYPE=SUBTITLES may enter this path.
   const lines = text.split(/\r?\n/);
   const segments = lines
@@ -82,6 +94,12 @@ export async function loadHLSSubtitles(
       }
     }
   }
-  if (!cues.length) throw new AppError('HLS', 'HLS 영문 자막 Cue를 찾지 못했습니다.');
+  if (!cues.length)
+    throw new AppError(
+      'HLS',
+      language === 'ja'
+        ? 'HLS 일본어 자막 Cue를 찾지 못했습니다.'
+        : 'HLS 영문 자막 Cue를 찾지 못했습니다.',
+    );
   return cues.sort((a, b) => a.startTime - b.startTime);
 }

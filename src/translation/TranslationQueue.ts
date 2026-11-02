@@ -6,6 +6,7 @@ import { AppError } from '../utils/errors';
 import { log } from '../utils/logger';
 import { chunkCues } from './TranslationManager';
 import { TranslationCache, translationKey, type TranslationStore } from './TranslationCache';
+import { animeContextTitle } from './prompts';
 import {
   validateTranslations,
   type TranslatedCue,
@@ -67,6 +68,7 @@ export class TranslationQueue {
   private running = false;
   private episodeSignal?: AbortSignal;
   private sourceId = 'embedded-en';
+  private animeTitle?: string;
 
   constructor(
     private provider: TranslationProvider,
@@ -133,6 +135,7 @@ export class TranslationQueue {
     this.episodeSignal = signal;
     this.sourceId = sourceId;
     this.bootstrapReady = false;
+    this.animeTitle = animeContextTitle(context);
     // Sorting copies the array, never modifies cue IDs, timecodes, or the caller's input.
     this.source = [...cues].sort((a, b) => a.startTime - b.startTime || a.endTime - b.endTime);
     const abortActive = () => this.active?.controller.abort(signal?.reason);
@@ -245,6 +248,7 @@ export class TranslationQueue {
       this.active = undefined;
       this.callbacks = undefined;
       this.running = false;
+      this.animeTitle = undefined;
     }
   }
 
@@ -352,6 +356,7 @@ export class TranslationQueue {
         const raw = await this.provider.translate(input, {
           sourceLanguage: language,
           previousContext,
+          ...(this.animeTitle ? { animeTitle: this.animeTitle } : {}),
           // Raw context is deterministic. Never key a chunk on another chunk's translated text.
           signal,
         });

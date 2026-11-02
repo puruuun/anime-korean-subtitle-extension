@@ -236,7 +236,7 @@ describe('progressive translation queue', () => {
               .slice(15, 20)
               .map(({ id, text }) => ({ id, text })),
           );
-          expect(options.previousTranslations).toBeUndefined();
+          expect(options.animeTitle).toBe('Progressive queue test');
           if (calls.filter((id) => id === 21).length === 1) return [{ id: 999, text: 'invalid' }];
         }
         return translated(input);

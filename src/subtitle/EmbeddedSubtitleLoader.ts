@@ -35,6 +35,6 @@ export async function loadEmbeddedSource(
     );
   };
   return source.kind === 'hls'
-    ? loadHLSSubtitles(source.url, load, signal)
+    ? loadHLSSubtitles(source.url, load, signal, language)
     : parseSubtitle(await load(source.url), source.format);
 }

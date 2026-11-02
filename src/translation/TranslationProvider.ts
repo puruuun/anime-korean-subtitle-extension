@@ -9,7 +9,7 @@ export interface TranslatedCue {
 export interface TranslationOptions {
   sourceLanguage: 'ja' | 'en';
   previousContext: TranslationCue[];
-  previousTranslations?: TranslatedCue[];
+  animeTitle?: string;
   signal?: AbortSignal;
 }
 export interface TranslationProvider {
