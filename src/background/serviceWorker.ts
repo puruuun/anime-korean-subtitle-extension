@@ -43,6 +43,8 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
         'EPISODE_NAVIGATING',
         'HEARTBEAT',
         'PLAYBACK_STATE',
+        'SHORTCUT_OFFSET',
+        'SHORTCUT_JAPANESE',
       ].includes(m.type)
     ) {
       const tabId = sender.tab.id;
@@ -75,6 +77,22 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
         return { ok: true };
       }
       if (m.type === 'HEARTBEAT') return { ok: true };
+      if (m.type === 'SHORTCUT_OFFSET') {
+        const status = await currentStatus(tabId);
+        if (!status) return { ok: false };
+        const next =
+          m.reset === true ? 0 : Math.round((status.offset + (Number(m.delta) || 0)) * 10) / 10;
+        const offset = await setOffset(status.context, next);
+        await updateOffset(tabId, offset);
+        return { ok: true, offset };
+      }
+      if (m.type === 'SHORTCUT_JAPANESE') {
+        const s = await getSettings();
+        s.display.showJapanese = !s.display.showJapanese;
+        await saveSettings(s);
+        await displayPreferencesChanged();
+        return { ok: true, showJapanese: s.display.showJapanese };
+      }
     }
     if (!trustedUI(sender)) throw Error('허용되지 않은 요청입니다.');
     switch (m.type) {

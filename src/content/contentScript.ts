@@ -7,6 +7,7 @@ import type { TranslationBufferStatus } from '../translation/TranslationQueue';
 import { adapterFor } from '../sites/adapter';
 import { observeNavigation } from './navigationObserver';
 import { EpisodeLifecycleManager } from './EpisodeLifecycleManager';
+import { resolveShortcut } from './shortcuts';
 declare global {
   interface Window {
     __animeSubIsolatedV1?: boolean;
@@ -169,6 +170,14 @@ if (!window.__animeSubIsolatedV1) {
     void lifecycle?.check();
   });
   void lifecycle?.check();
+  function onKeyDown(event: KeyboardEvent) {
+    if (!alive || (!video && window !== window.top)) return;
+    const shortcut = resolveShortcut(event);
+    if (!shortcut) return;
+    event.preventDefault();
+    void message(shortcut);
+  }
+  window.addEventListener('keydown', onKeyDown);
   window.addEventListener('pagehide', () => {
     alive = false;
     clearInterval(probeTimer);
@@ -179,6 +188,7 @@ if (!window.__animeSubIsolatedV1) {
     finishPreparation(false);
     if (video) for (const name of playbackEvents) video.removeEventListener(name, onVideoEvent);
     renderer?.destroy();
+    window.removeEventListener('keydown', onKeyDown);
   });
   window.addEventListener('pageshow', (event) => {
     if (event.persisted) location.reload();

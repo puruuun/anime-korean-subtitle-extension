@@ -575,6 +575,7 @@ function Popup() {
             </button>
           </div>
           <small>양수 값은 자막을 앞당깁니다. 회차별로 저장됩니다.</small>
+          <small>단축키: Alt+[ / Alt+] (±0.5s) · Alt+\ (Reset) · Alt+J (일본어 자막)</small>
         </section>
         <div className="toolbar">
           <button
