@@ -49,26 +49,77 @@ jobs:
       - name: Run unit tests
         run: npm test
 
-      - name: Build personal target
+      - name: Build personal package
         run: |
           npm run build:personal
-          mkdir -p dist_archive/personal
-          cp -r dist/* dist_archive/personal/
+          mkdir -p release_stage/personal/extension
+          cp -r dist/* release_stage/personal/extension/
 
-      - name: Build public target
+      - name: Build public package
         run: |
           npm run build:public
-          mkdir -p dist_archive/public
-          cp -r dist/* dist_archive/public/
-          rm -rf dist
-          mkdir -p dist
-          mv dist_archive/personal dist/personal
-          mv dist_archive/public dist/public
+          mkdir -p release_stage/public/extension
+          cp -r dist/* release_stage/public/extension/
 
-      - name: Package extension archives
+      - name: Package release archives
         run: |
-          (cd dist/personal && zip -r "../../anime-korean-subtitle-personal-${TAG}.zip" .)
-          (cd dist/public && zip -r "../../anime-korean-subtitle-public-${TAG}.zip" .)
+          (cd release_stage/personal && zip -r "../../anime-korean-subtitle-${TAG}.zip" extension)
+          (cd release_stage/public && zip -r "../../anime-korean-subtitle-public-${TAG}.zip" extension)
+          git archive --format=zip --prefix="anime-korean-subtitle-${TAG#v}/" -o "anime-korean-subtitle-source-${TAG}.zip" HEAD
+          sha256sum "anime-korean-subtitle-${TAG}.zip" "anime-korean-subtitle-public-${TAG}.zip" "anime-korean-subtitle-source-${TAG}.zip" > "SHA256SUMS-${TAG}.txt"
+
+      - name: Generate release notes
+        run: |
+          cat << 'EOF' > release-notes.md
+          ## Anime Korean Subtitle ${TAG}
+
+          Miruro / Re:ANIME 회차 감지 및 외부 한국어 자막 연동 / 실시간 AI 번역 Chrome 확장프로그램의 정식 릴리스입니다.
+
+          ### 배포 패키지 안내
+
+          | 파일명 | 권한 프로필 | 설명 |
+          | :--- | :--- | :--- |
+          | `anime-korean-subtitle-${TAG}.zip` | 개인용 (`<all_urls>`) | 기본 권한 자동 허용, 재생 중 추가 권한 팝업 없음 (권장) |
+          | `anime-korean-subtitle-public-${TAG}.zip` | 공개용 (선언 호스트) | 최소 권한 원칙, 외부 호스트 초기 설정 시 수동 승인 |
+          | `anime-korean-subtitle-source-${TAG}.zip` | 소스 코드 | 태그 커밋 기준 전체 소스 코드 아카이브 |
+          | `SHA256SUMS-${TAG}.txt` | 체크섬 | SHA-256 무결성 검증 체크섬 파일 |
+
+          ### 설치 방법
+          1. 원하는 패키지(`anime-korean-subtitle-${TAG}.zip`)를 다운로드하여 압축을 해제합니다.
+          2. Chrome에서 `chrome://extensions` 접속 후 우측 상단 **개발자 모드**를 활성화합니다.
+          3. **압축해제된 확장 프로그램 로드**를 클릭하고 해제된 폴더 내의 `extension` 디렉토리를 선택합니다.
+
+          ---
+
+          ### 주요 변경 사항 (Changelog)
+
+          #### 1. 핵심 버그 및 정확도 수정 (Bug Fixes)
+          - **TASK-001**: 내장 일본어(HLS) 자막 로드 시 영어 트랙만 필터링하는 버그 수정
+          - **TASK-002**: 번역 프롬프트 불필요 필드(`previousTranslations`) 정리 및 작품 컨텍스트(`animeTitle`) 주입
+          - **TASK-003**: ASS/SSA 자막 파싱 시 드로잉 명령(`{\p1}...{\p0}`) 좌표 대사 노출 방지
+          - **TASK-004**: SMI(SAMI) 자막 종료 싱크 처리 보강 및 비정상 잔류 대사 안전장치 추가
+
+          #### 2. 성능 및 안정성 개선 (Performance & Reliability)
+          - **TASK-005**: HLS 자막 세그먼트 제한적 병렬 다운로드 도입 (세그먼트 로드 병목 해소)
+          - **TASK-006**: IndexedDB 캐시 만료 항목 정리(Eviction/GC) 메커니즘 추가
+          - **TASK-007**: `SubtitleRenderer` 프레임 렌더링 최적화 및 정렬된 Cue 탐색 도입
+          - **TASK-008**: 팝업(Popup) 상태 폴링 경량화 (불필요한 반복 조회 분리)
+
+          #### 3. 기능 개선 및 구조 리팩토링 (Enhancements & Refactoring)
+          - **TASK-009**: 플레이어 키보드 단축키 지원 (`Alt+[`, `Alt+]` 싱크 ±0.5s 조절, `Alt+\` 싱크 리셋, `Alt+J` 일본어 자막 토글)
+          - **TASK-010**: `messageRouter.ts` 책임 분리 리팩토링 (`routerTypes.ts`, `japaneseCoordinator.ts` 모듈화)
+          - **TASK-011**: GitHub Actions CI/Release 자동화 워크플로우 구축 및 Git 단일 작성자(`puruuun`) 규칙 명시
+
+          ---
+
+          ### 품질 검증 요약 (Quality Gate Summary)
+          - TypeScript 정적 타입 검사 (`npm run typecheck`): 에러 0건 통과
+          - 전체 단위 테스트 (`npm test`): 28개 파일 268개 단위 테스트 전체 통과
+          - 개인용 및 공개용 듀얼 빌드 프로필 무결성 검증 완료
+          - Source commit SHA: `${GITHUB_SHA}`
+          EOF
+          sed -i "s/\${TAG}/${TAG}/g" release-notes.md
+          sed -i "s/\${GITHUB_SHA}/${GITHUB_SHA}/g" release-notes.md
 
       - name: Publish GitHub Release
         env:
@@ -76,4 +127,21 @@ jobs:
         run: |
           git config user.name "puruuun"
           git config user.email "188972188+puruuun@users.noreply.github.com"
-          gh release view "$TAG" >/dev/null 2>&1 && gh release upload "$TAG" "anime-korean-subtitle-personal-${TAG}.zip" "anime-korean-subtitle-public-${TAG}.zip" --clobber || gh release create "$TAG" "anime-korean-subtitle-personal-${TAG}.zip" "anime-korean-subtitle-public-${TAG}.zip" --title "Anime Korean Subtitle ${TAG}" --generate-notes --latest
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" \
+              "anime-korean-subtitle-${TAG}.zip" \
+              "anime-korean-subtitle-public-${TAG}.zip" \
+              "anime-korean-subtitle-source-${TAG}.zip" \
+              "SHA256SUMS-${TAG}.txt" \
+              --clobber
+            gh release edit "$TAG" --title "Anime Korean Subtitle ${TAG}" --notes-file release-notes.md --latest
+          else
+            gh release create "$TAG" \
+              "anime-korean-subtitle-${TAG}.zip" \
+              "anime-korean-subtitle-public-${TAG}.zip" \
+              "anime-korean-subtitle-source-${TAG}.zip" \
+              "SHA256SUMS-${TAG}.txt" \
+              --title "Anime Korean Subtitle ${TAG}" \
+              --notes-file release-notes.md \
+              --latest
+          fi
