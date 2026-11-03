@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release version tag (e.g. v0.5.4)'
+        description: 'Release version tag (e.g. v0.5.5)'
         required: true
         type: string
 
@@ -112,11 +112,17 @@ jobs:
           - **한국어 자막 기준 자동 싱크 보정**: 한국어 자막 타임라인과 일본어 자막 대사 시작 경계를 비교하여 1.5초 이상 밀려 있는 TV 방송 자막 등을 자동으로 타임스탬프 보정 (`alignJapaneseCues`)
           - **2기 이상 누적 회차 매칭**: 2기 이후 파일명이 누적 회차(예: 12화 → 24화)로 표기된 경우 `episodeOffset`을 반영하여 정상 인식 및 매칭
 
+          #### 5. 구작/미등록 애니메이션 한국어 자막 웹 탐색 및 블로그 해석기 고도화 (Issue #5, Issue #7)
+          - **티스토리 & 네이버 블로그 전용 리졸버 (`TistoryResolver`, `NaverBlogResolver`)**: 티스토리 내부 검색(`/search/...`) 및 파일블록 용량 표기 정규화, 네이버 블로그 `mainFrame` 언랩·`aPostFiles` 첨부파일 추출·`PostSearchList.naver` 이전 회차 탐색 지원
+          - **합본/다중 ZIP 회차 자동 선별 (`archive.ts`, `GenericHtmlResolver.ts`)**: 범위형 압축파일(`1~12화.zip`, `합본`, `전편`, `완결`) 인식 및 압축파일 내 다중 파일 존재 시 특전(OP/ED/PV) 제외, Web/BD 우선 가산점 및 확장자 우선순위로 최적 자막 자동 선택
+          - **Wikidata 한국어 제목 자동 확보 (`koreanTitleResolver.ts`)**: 한글 제목이 없는 옛날 작품의 AniList ID(`P8729`)/MAL ID(`P4086`) 및 원제를 기반으로 위키데이터에서 공식 한국어 제목·별칭 자동 조회 및 7일 캐싱
+          - **웹 한국어 자막 폴백 검색 및 Google Custom Search 연동 (`WebKoreanSubtitleProvider.ts`)**: Anissia 미등록/만료 작품 재생 시 AI 번역 전 Google Custom Search JSON API(선택 설정)·네이버·DuckDuckGo 검색으로 자막 블로그를 찾아 회차별로 자동 적용
+
           ---
 
           ### 품질 검증 요약 (Quality Gate Summary)
           - TypeScript 정적 타입 검사 (`npm run typecheck`): 에러 0건 통과
-          - 전체 단위 테스트 (`npm test`): 28개 파일 272개 단위 테스트 전체 통과
+          - 전체 단위 테스트 (`npm test`): 29개 파일 289개 단위 테스트 전체 통과
           - 개인용 및 공개용 듀얼 빌드 프로필 무결성 검증 완료
           - Source commit SHA: `${GITHUB_SHA}`
           EOF
