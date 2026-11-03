@@ -47,8 +47,9 @@
      - `npm.cmd run typecheck` (`tsc --noEmit` 에러 0건)
      - `npm.cmd test` (`vitest run` 전체 단위 테스트 통과)
      - `npm.cmd run build:personal` 및 `npm.cmd run build:public` (두 배포 타겟 모두 빌드 성공)
-5. **Git 작성자(Contributors) 단일화 규칙**
+5. **Git 작성자(Contributors) 단일화 및 영문 작성 규칙**
    - 모든 Git 커밋 및 태그의 Author / Committer는 반드시 프로젝트 소유자인 `puruuun <188972188+puruuun@users.noreply.github.com>`으로 설정해야 하며, AI 에이전트 이름(`Codex`, `Claude`, `Gemini` 등)이나 `Co-authored-by:` 트레일러를 절대 포함하지 않습니다.
+   - GitHub에 등록하는 모든 **Issue, Pull Request(PR), Commit 메시지**는 반드시 **영문(English)**으로 작성하며, 정식 Release 제목은 앞에 별도 이름을 붙이지 않고 버전 태그만 표기합니다(예: `v0.5.4`).
 6. **GitHub Pull Request(PR) 생성 및 GitHub Actions CI 검증 (`Pull requests` 탭)**
    - 원격 브랜치 푸시 후 GitHub API를 통해 `main` 브랜치 대상 **Pull Request(PR)**를 생성하고, 본문에 `Closes #N`을 명시하여 Issue와 자동 연결합니다.
    - PR에서 `.github/workflows/ci.yml`(자동 품질 관문)이 통과(✅)하는 것을 확인합니다.
