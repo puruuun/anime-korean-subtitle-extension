@@ -309,6 +309,39 @@ function SettingsPage() {
           <a href="https://jimaku.cc/api/docs" target="_blank" rel="noreferrer">
             Jimaku API 안내 ↗
           </a>
+          <label>
+            Google Custom Search API Key (선택)
+            <input
+              type="password"
+              autoComplete="off"
+              value={s.googleSearch.apiKey}
+              onChange={(e) =>
+                setS({ ...s, googleSearch: { ...s.googleSearch, apiKey: e.target.value } })
+              }
+            />
+          </label>
+          <label>
+            Google Search Engine ID / CX (선택)
+            <input
+              type="text"
+              value={s.googleSearch.cx}
+              placeholder="예: a1b2c3d4e5f6g7h8i"
+              onChange={(e) =>
+                setS({ ...s, googleSearch: { ...s.googleSearch, cx: e.target.value } })
+              }
+            />
+          </label>
+          <small>
+            Anissia에 없는 옛날 작품의 한국어 자막 블로그를 찾을 때 기본 웹
+            검색(네이버·DuckDuckGo)과 함께 Google Custom Search JSON API를 우선 사용합니다.
+          </small>
+          <a
+            href="https://developers.google.com/custom-search/v1/overview"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Google Custom Search API 안내 ↗
+          </a>
         </details>
       </section>
       <section>
