@@ -24,7 +24,7 @@ export function blogSeriesTitle(title: string) {
     .replace(/\s*(?:자막|subtitles?)\s*$/i, '')
     .trim();
 }
-function postEpisodes(title: string): string[] {
+export function postEpisodes(title: string): string[] {
   const range = title.match(/(\d+)\s*[-~～〜]\s*(\d+)\s*(?:화|회|話)/);
   if (range && Number(range[2]) >= Number(range[1]) && Number(range[2]) - Number(range[1]) <= 500)
     return Array.from({ length: Number(range[2]) - Number(range[1]) + 1 }, (_, i) =>
@@ -33,7 +33,7 @@ function postEpisodes(title: string): string[] {
   const single = title.match(/(\d+(?:\.\d+)?)\s*(?:화|회|話)/)?.[1];
   return single ? [normalizeEpisode(single)!] : [];
 }
-const seriesKey = (title: string) =>
+export const seriesKey = (title: string) =>
   blogSeriesTitle(title)
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]/gu, '');

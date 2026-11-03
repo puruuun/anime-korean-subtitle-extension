@@ -10,6 +10,8 @@ import {
 import { AppError } from '../../utils/errors';
 import { GoogleDriveResolver } from './GoogleDriveResolver';
 import { BlogspotResolver } from './BlogspotResolver';
+import { TistoryResolver } from './TistoryResolver';
+import { NaverBlogResolver } from './NaverBlogResolver';
 import { verifyFileEpisode } from './fileValidation';
 
 export class SubtitleLinkResolverChain {
@@ -18,6 +20,8 @@ export class SubtitleLinkResolverChain {
       new DirectFileResolver(),
       new GoogleDriveResolver(),
       new BlogspotResolver(),
+      new TistoryResolver(),
+      new NaverBlogResolver(),
       new GenericHtmlResolver(),
     ],
     private load: (

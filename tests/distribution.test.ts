@@ -9,15 +9,19 @@ import {
 import { SubtitleLinkResolverChain } from '../src/subtitle/links/SubtitleLinkResolverChain';
 import { GenericHtmlResolver, subtitleLinks } from '../src/subtitle/links/GenericHtmlResolver';
 import { createResourceLoader } from '../src/subtitle/links/resourceLoader';
-import { extractSubtitle } from '../src/subtitle/archive';
+import { extractSubtitle, rankArchiveEntry } from '../src/subtitle/archive';
 import { filenameEpisode } from '../src/anime/episodeNormalizer';
 import { database } from '../src/storage/database';
 import { DirectFileResolver } from '../src/subtitle/links/DirectFileResolver';
+import { TistoryResolver } from '../src/subtitle/links/TistoryResolver';
+import { NaverBlogResolver } from '../src/subtitle/links/NaverBlogResolver';
+
 const id = '1Dm5IbVlS3p-sKNsChNN9cr2v27N7zZuG',
   latestId = '1P7zg3iNYIObJ26fxDLzIYcuUwmYTwBt7';
 const drive = (id: string) => 'https://drive.google.com/file/d/' + id + '/view';
 const body =
   '[Script Info]\nTitle: Show\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,한국어';
+const srt = '1\n00:00:01,000 --> 00:00:03,000\n한국어';
 const candidate = {
   id: 'anissia:3041:1',
   providerId: 'anissia',
@@ -50,6 +54,7 @@ beforeEach(async () => {
   await database.clear();
 });
 afterEach(() => vi.unstubAllGlobals());
+
 describe('Drive distribution', () => {
   it.each([
     drive(id),
@@ -121,6 +126,7 @@ describe('Drive distribution', () => {
     });
   });
 });
+
 describe('Blogspot attachments and prior episodes', () => {
   it('finds an older episode in the sole batch ZIP alongside the latest ZIP and fonts, within the article body', async () => {
     const load = vi.fn(async (url: string) => ({
@@ -223,6 +229,7 @@ describe('Blogspot attachments and prior episodes', () => {
     ).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
+
 describe('legacy ZIP names and varied episode filenames', () => {
   it.each([
     ['다메닝겐2 1화.ass', '1'],
@@ -271,6 +278,295 @@ describe('legacy ZIP names and varied episode filenames', () => {
     }
     expect(extractSubtitle(zip.buffer as ArrayBuffer, 1, undefined, 2, [], true)).toMatchObject({
       name: '가가 1화.ass',
+    });
+  });
+});
+
+describe('archive multi-file ranking and bonus filtering', () => {
+  it('excludes bonus patterns (OP, ED, PV, etc.) when an episode subtitle is present', () => {
+    const zip = zipSync({
+      '[Show] E01 NCED.ass': strToU8(body),
+      '[Show] E01 NCOP.ass': strToU8(body),
+      '[Show] E01.ass': strToU8(body),
+    });
+    const result = extractSubtitle(zip.buffer as ArrayBuffer, 1, undefined, 1, ['1'], true, 'ko');
+    expect(result.name).toBe('[Show] E01.ass');
+  });
+
+  it('prefers WEB/BD over TV capture', () => {
+    const zip = zipSync({
+      '[TV-Cap] Show E01.srt': strToU8(body),
+      '[BDRip] Show E01.srt': strToU8(body),
+    });
+    const result = extractSubtitle(zip.buffer as ArrayBuffer, 1, undefined, 1, ['1'], true, 'ko');
+    expect(result.name).toBe('[BDRip] Show E01.srt');
+  });
+
+  it('ranks extensions according to language (ko: smi > srt > ass, ja: srt > ass > smi)', () => {
+    const zipKo = zipSync({
+      'Show E01.ass': strToU8(body),
+      'Show E01.smi': strToU8(body),
+      'Show E01.srt': strToU8(body),
+    });
+    expect(
+      extractSubtitle(zipKo.buffer as ArrayBuffer, 1, undefined, 1, ['1'], true, 'ko').name,
+    ).toBe('Show E01.smi');
+
+    const zipJa = zipSync({
+      'Show E01.smi': strToU8(body),
+      'Show E01.srt': strToU8(body),
+      'Show E01.ass': strToU8(body),
+    });
+    expect(
+      extractSubtitle(zipJa.buffer as ArrayBuffer, 1, undefined, 1, ['1'], true, 'ja').name,
+    ).toBe('Show E01.srt');
+  });
+
+  it('breaks ties lexicographically', () => {
+    const zip = zipSync({
+      'B_Show E01.srt': strToU8(body),
+      'A_Show E01.srt': strToU8(body),
+    });
+    expect(
+      extractSubtitle(zip.buffer as ArrayBuffer, 1, undefined, 1, ['1'], true, 'ko').name,
+    ).toBe('A_Show E01.srt');
+  });
+});
+
+describe('GenericHtmlResolver Tistory fileblock and range ZIPs', () => {
+  it('strips file sizes from Tistory fileblocks and resolves range ZIPs', async () => {
+    const zipData = zipSync({
+      'Show E01.smi': strToU8(body),
+      'Show E05.smi': strToU8(body),
+      'Show E12.smi': strToU8(body),
+    });
+    const html = `
+      <div class="contents_style">
+        <div class="fileblock">
+          <a href="https://blog.kakaocdn.net/dn/xyz/attach.zip?attach=1">
+            <span class="name">[자막] 사일런트 위치 01-12화.zip 2.5MB</span>
+          </a>
+        </div>
+      </div>
+    `;
+    const load = vi.fn(async (url: string) => ({
+      ...resource(url, '', { 'content-type': 'application/zip' }),
+      bytes: zipData,
+    }));
+    const cand = {
+      ...candidate,
+      episode: '5',
+      fileEpisodes: ['5'],
+      pageUrl: 'https://author.tistory.com/123',
+    };
+    const result = await new GenericHtmlResolver().resolve(resource(cand.pageUrl, html), {
+      candidate: cand,
+      load,
+    });
+    expect(result.kind).toBe('file');
+    expect(load).toHaveBeenCalledWith(
+      'https://blog.kakaocdn.net/dn/xyz/attach.zip?attach=1',
+      undefined,
+    );
+  });
+
+  it('selects higher ranking extension when multiple matching files are present in HTML', async () => {
+    const load = vi.fn(async (url: string) => {
+      const ext = url.split('.').pop();
+      return resource(url, body, {
+        'content-disposition': `attachment; filename="Show E01.${ext}"`,
+      });
+    });
+    const html = `
+      <a href="/Show.E01.srt">1화 SRT</a>
+      <a href="/Show.E01.smi">1화 SMI</a>
+      <a href="/Show.E01.ass">1화 ASS</a>
+    `;
+    const cand = { ...candidate, episode: '1', fileEpisodes: ['1'] };
+    const result = await new GenericHtmlResolver().resolve(
+      resource('https://author.example.com/post', html),
+      { candidate: cand, load },
+    );
+    expect(result.kind).toBe('file');
+    expect(result).toMatchObject({ url: 'https://author.example.com/Show.E01.smi' });
+  });
+});
+
+describe('TistoryResolver', () => {
+  it('searches prior episodes from a latest post on Tistory', async () => {
+    const tistoryPost13 = `
+      <div class="title-article">사일런트 위치 13화(완) 자막</div>
+      <div class="contents_style">
+        <a href="https://blog.kakaocdn.net/dn/ep13.zip">13화.zip</a>
+      </div>
+    `;
+    const tistorySearch = `
+      <div class="search-list">
+        <a href="/100">사일런트 위치 13화 자막</a>
+        <a href="/50">사일런트 위치 1화 자막</a>
+        <a href="/category/anime">카테고리</a>
+      </div>
+    `;
+    const tistoryPost1 = `
+      <div class="title-article">사일런트 위치 1화 자막</div>
+      <div class="contents_style">
+        <a href="https://blog.kakaocdn.net/dn/ep01.zip">1화.zip</a>
+      </div>
+    `;
+    const zip1 = zipSync({ '사일런트 위치 1화.ass': strToU8(body) });
+    const zip13 = zipSync({ '사일런트 위치 13화.ass': strToU8(body) });
+
+    const load = vi.fn(async (url: string) => {
+      if (url === 'https://animedub.tistory.com/100') {
+        return resource(url, tistoryPost13);
+      }
+      if (url.includes('/search/')) {
+        return resource(url, tistorySearch);
+      }
+      if (url === 'https://animedub.tistory.com/50') {
+        return resource(url, tistoryPost1);
+      }
+      if (url === 'https://blog.kakaocdn.net/dn/ep01.zip') {
+        return { ...resource(url, '', { 'content-type': 'application/zip' }), bytes: zip1 };
+      }
+      if (url === 'https://blog.kakaocdn.net/dn/ep13.zip') {
+        return { ...resource(url, '', { 'content-type': 'application/zip' }), bytes: zip13 };
+      }
+      return resource(url, 'not found', { status: '404' });
+    });
+
+    const cand = {
+      ...candidate,
+      episode: '1',
+      fileEpisodes: ['1'],
+      pageUrl: 'https://animedub.tistory.com/100',
+    };
+
+    const resolver = new TistoryResolver();
+    const result = await resolver.resolve(resource(cand.pageUrl, tistoryPost13), {
+      candidate: cand,
+      load,
+    });
+
+    expect(result?.kind).toBe('file');
+    expect(result).toMatchObject({
+      url: 'https://blog.kakaocdn.net/dn/ep01.zip',
+    });
+  });
+});
+
+describe('NaverBlogResolver', () => {
+  it('unwraps mainFrame and extracts aPostFiles attachment', async () => {
+    const outerHtml = `
+      <html>
+        <iframe id="mainFrame" name="mainFrame" src="/PostView.naver?blogId=testauthor&logNo=220000000001"></iframe>
+      </html>
+    `;
+    const innerHtml = `
+      <span class="itemSubjectBoldfont">사일런트 위치 1화 자막</span>
+      <script>
+        var aPostFiles = [
+          {
+            "attachFileName": "사일런트 위치 01화.srt",
+            "attachUrl": "https://blogattach.naver.net/testauthor/220000000001/Show01.srt"
+          }
+        ];
+      </script>
+    `;
+    const load = vi.fn(async (url: string) => {
+      if (url.includes('/PostView.naver')) {
+        return resource(url, innerHtml);
+      }
+      if (url.includes('blogattach.naver.net')) {
+        return resource(url, srt, {
+          'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent('사일런트 위치 01화.srt')}`,
+        });
+      }
+      return resource(url, 'not found');
+    });
+
+    const cand = {
+      ...candidate,
+      episode: '1',
+      fileEpisodes: ['1'],
+      pageUrl: 'https://blog.naver.com/testauthor/220000000001',
+    };
+
+    const resolver = new NaverBlogResolver();
+    const result = await resolver.resolve(resource(cand.pageUrl, outerHtml), {
+      candidate: cand,
+      load,
+    });
+
+    expect(result?.kind).toBe('file');
+    expect(result).toMatchObject({
+      name: '사일런트 위치 01화.srt',
+    });
+  });
+
+  it('searches prior episodes from latest post on Naver blog', async () => {
+    const post12 = `
+      <span class="itemSubjectBoldfont">사일런트 위치 12화 자막</span>
+      <script>
+        var aPostFiles = [
+          {
+            "attachFileName": "사일런트 위치 12화.srt",
+            "attachUrl": "https://blogattach.naver.net/testauthor/12/Show12.srt"
+          }
+        ];
+      </script>
+    `;
+    const searchHtml = `
+      <div class="search_list">
+        <a href="/PostView.naver?blogId=testauthor&logNo=12">사일런트 위치 12화 자막</a>
+        <a href="/PostView.naver?blogId=testauthor&logNo=1">사일런트 위치 1화 자막</a>
+      </div>
+    `;
+    const post1 = `
+      <span class="itemSubjectBoldfont">사일런트 위치 1화 자막</span>
+      <script>
+        var aPostFiles = [
+          {
+            "attachFileName": "사일런트 위치 01화.srt",
+            "attachUrl": "https://blogattach.naver.net/testauthor/1/Show01.srt"
+          }
+        ];
+      </script>
+    `;
+    const load = vi.fn(async (url: string) => {
+      if (url.includes('logNo=12') || url.endsWith('/12')) {
+        return resource(url, post12);
+      }
+      if (url.includes('PostSearchList.naver')) {
+        return resource(url, searchHtml);
+      }
+      if (url.includes('logNo=1') || url.endsWith('/1')) {
+        return resource(url, post1);
+      }
+      if (url.includes('blogattach.naver.net/testauthor/1/Show01.srt')) {
+        return resource(url, srt, {
+          'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent('사일런트 위치 01화.srt')}`,
+        });
+      }
+      return resource(url, 'not found');
+    });
+
+    const cand = {
+      ...candidate,
+      episode: '1',
+      fileEpisodes: ['1'],
+      pageUrl: 'https://blog.naver.com/PostView.naver?blogId=testauthor&logNo=12',
+    };
+
+    const resolver = new NaverBlogResolver();
+    const result = await resolver.resolve(resource(cand.pageUrl, post12), {
+      candidate: cand,
+      load,
+    });
+
+    expect(result?.kind).toBe('file');
+    expect(result).toMatchObject({
+      name: '사일런트 위치 01화.srt',
     });
   });
 });
