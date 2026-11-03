@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import 'fake-indexeddb/auto';
+import type { AnimeContext } from '../src/anime/AnimeContext';
 import { filenameEpisode, japaneseFileCandidate } from '../src/providers/japanese/fileMatching';
 import { JimakuProvider } from '../src/providers/jimaku/JimakuProvider';
 import { KitsunekkoProvider, parseCatalog } from '../src/providers/kitsunekko/KitsunekkoProvider';
+import { scoreResult } from '../src/subtitle/SubtitleSearch';
 import { database } from '../src/storage/database';
+
 const c = {
   site: 'reanime' as const,
   title: 'Frieren',
@@ -52,7 +55,7 @@ describe('conservative episode and release matching', () => {
       'Show.ass',
     ])
       expect(filenameEpisode(name)).toBeUndefined();
-    const make = (name: string, context: import('../src/anime/AnimeContext').AnimeContext = c) =>
+    const make = (name: string, context: AnimeContext = c) =>
       japaneseFileCandidate(
         context,
         'jimaku',
@@ -66,7 +69,83 @@ describe('conservative episode and release matching', () => {
     expect(make('Show E07 2020.ass', { ...c, year: 2026 })).toBeUndefined();
     expect(make('Show E07.ass')).toBeDefined();
   });
+
+  it('prioritizes WEBRip/DMMTV .srt over AT-X TV capture raw files', () => {
+    const context: AnimeContext = {
+      site: 'reanime',
+      title: '塩対応の佐藤さんが俺にだけ甘い',
+      episode: 1,
+      pageUrl: 'https://reanime.to/watch/satou?ep=1',
+    };
+    const files = [
+      '[shincaps] Shiotaiou no Satou-san ga Ore ni dake Amai - 01 (AT-X 1440x1080 MPEG2 AAC).srt',
+      '塩対応の佐藤さんが俺にだけ甘い.S01E01.一枚目.塩対応の佐藤さん.WEBRip.DMMTV.ja[cc].srt',
+      '[NanakoRaws] Shiotaiou no Satou-san ga Ore ni dake Amai - 01 (AT-X 1080p HEVC AAC).srt',
+    ];
+    const scored = files
+      .map((name) =>
+        scoreResult(
+          context,
+          japaneseFileCandidate(
+            context,
+            'jimaku',
+            { title: context.title, matchedTitle: context.title },
+            { name, url: 'https://jimaku.cc/file/' + name },
+          )!,
+          'ja',
+        ),
+      )
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+
+    expect(scored[0].filename).toBe(
+      '塩対応の佐藤さんが俺にだけ甘い.S01E01.一枚目.塩対応の佐藤さん.WEBRip.DMMTV.ja[cc].srt',
+    );
+    expect(scored[0].reasons).toContain('웹 스트리밍 소스');
+    expect(scored[1].reasons).toContain('TV 방송 캡처 오프셋 가능성');
+    expect(scored[2].reasons).toContain('TV 방송 캡처 오프셋 가능성');
+    expect(scored[0].score!).toBeGreaterThan(scored[1].score!);
+    expect(scored[0].score!).toBeGreaterThan(scored[2].score!);
+  });
+
+  it('matches cumulative episode 24 for season 2 episode 12 with episodeOffset 12 and prefers WEBRip Netflix', () => {
+    const context: AnimeContext = {
+      site: 'reanime',
+      title: '正反対な君と僕',
+      season: 2,
+      episode: 12,
+      episodeOffset: 12,
+      pageUrl: 'https://reanime.to/watch/seihantai?ep=12',
+    };
+    const webrip = '正反対な君と僕.S02E24.スタートライン.WEBRip.Netflix.ja[cc].srt';
+    const tv = '[NanakoRaws] Seihantai na Kimi to Boku S02E12 (CBC TV 1080p HEVC AAC).srt';
+
+    const candWebrip = japaneseFileCandidate(
+      context,
+      'jimaku',
+      { title: context.title, matchedTitle: context.title },
+      { name: webrip, url: 'https://jimaku.cc/file/' + webrip },
+    );
+    const candTv = japaneseFileCandidate(
+      context,
+      'jimaku',
+      { title: context.title, matchedTitle: context.title },
+      { name: tv, url: 'https://jimaku.cc/file/' + tv },
+    );
+
+    expect(candWebrip).toBeDefined();
+    expect(candTv).toBeDefined();
+    expect(candWebrip?.episode).toBe('12');
+    expect(candTv?.episode).toBe('12');
+
+    const scoredWebrip = scoreResult(context, candWebrip!, 'ja');
+    const scoredTv = scoreResult(context, candTv!, 'ja');
+
+    expect(scoredWebrip.score!).toBeGreaterThan(scoredTv.score!);
+    expect(scoredWebrip.reasons).toContain('웹 스트리밍 소스');
+    expect(scoredTv.reasons).toContain('TV 방송 캡처 오프셋 가능성');
+  });
 });
+
 describe('documented Japanese providers', () => {
   it('Jimaku prioritizes AniList ID, uses raw Authorization, and verifies every filename itself', async () => {
     const fetch = vi.fn(async (url: string) =>

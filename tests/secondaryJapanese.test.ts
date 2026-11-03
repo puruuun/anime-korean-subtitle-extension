@@ -1,9 +1,15 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { database } from '../src/storage/database';
-import { secondaryJapanese } from '../src/subtitle/SecondaryJapanese';
+import {
+  secondaryJapanese,
+  alignJapaneseCues,
+  boundaryAlignmentScore,
+} from '../src/subtitle/SecondaryJapanese';
 import type { SubtitleProvider } from '../src/providers/SubtitleProvider';
+import type { SubtitleCue } from '../src/subtitle/SubtitleCue';
 import { defaultSettings, normalizeSettings, validateSettings } from '../src/storage/settings';
+
 const c = {
   site: 'miruro' as const,
   title: 'Test Show',
@@ -104,6 +110,90 @@ describe('additional Japanese is a real source, never another translation', () =
     await expect(
       secondaryJapanese(c, [provider('jimaku')], controller.signal, async () => []),
     ).rejects.toThrow();
+  });
+
+  it('alignJapaneseCues shifts delayed target cues by -10.0 seconds to match reference timestamps', () => {
+    const referenceCues: SubtitleCue[] = Array.from({ length: 25 }, (_, i) => ({
+      id: i + 1,
+      startTime: i * 4,
+      endTime: i * 4 + 2,
+      text: `한국어 대사 ${i + 1}`,
+    }));
+    // +10초 밀려 있는 일본어 TV 방송 자막
+    const targetCues: SubtitleCue[] = referenceCues.map((cue) => ({
+      ...cue,
+      startTime: cue.startTime + 10.0,
+      endTime: cue.endTime + 10.0,
+      text: `日本語セリフ ${cue.id}`,
+    }));
+
+    const aligned = alignJapaneseCues(referenceCues, targetCues);
+    expect(aligned.offsetSeconds).toBe(-10);
+    expect(aligned.cues).toHaveLength(25);
+    expect(aligned.cues[0].startTime).toBe(0);
+    expect(aligned.cues[0].endTime).toBe(2);
+    expect(aligned.cues[10].startTime).toBe(referenceCues[10].startTime);
+    expect(aligned.cues[10].endTime).toBe(referenceCues[10].endTime);
+    expect(aligned.score).toBeGreaterThan(15);
+  });
+
+  it('secondaryJapanese automatically corrects +10.0s offset using Korean reference cues', async () => {
+    const starts = [
+      1.2, 3.5, 7.8, 12.1, 15.4, 19.8, 24.2, 28.6, 33.1, 38.4, 43.0, 48.2, 53.5, 59.1, 64.7, 70.2,
+      75.8, 81.3, 87.0, 92.4, 98.1, 104.5,
+    ];
+    const referenceCues: SubtitleCue[] = starts.map((s, i) => ({
+      id: i + 1,
+      startTime: s,
+      endTime: s + 2.0,
+      text: `한국어 ${i + 1}`,
+    }));
+
+    const srtLines = referenceCues
+      .map((cue, i) => {
+        const s = cue.startTime + 10;
+        const e = cue.endTime + 10;
+        const fmt = (t: number) => {
+          const m = String(Math.floor(t / 60)).padStart(2, '0');
+          const sec = String(Math.floor(t % 60)).padStart(2, '0');
+          const ms = String(Math.round((t % 1) * 1000)).padStart(3, '0');
+          return `00:${m}:${sec},${ms}`;
+        };
+        return `${i + 1}\n${fmt(s)} --> ${fmt(e)}\n日本語 ${i + 1}`;
+      })
+      .join('\n\n');
+
+    const delayedProvider: SubtitleProvider = {
+      id: 'jimaku',
+      search: vi.fn(async () => [
+        {
+          id: 'test-delayed',
+          providerId: 'jimaku',
+          title: c.title,
+          release: 'Test Show S01E01 (AT-X).srt',
+          episode: 1,
+          filename: 'Test Show S01E01 (AT-X).srt',
+          language: 'ja' as const,
+          downloadUrl: 'https://jimaku.cc/delayed.srt',
+        },
+      ]),
+      download: vi.fn(async () => new TextEncoder().encode(srtLines).buffer),
+    };
+
+    const result = await secondaryJapanese(
+      c,
+      [delayedProvider],
+      new AbortController().signal,
+      async () => [],
+      false,
+      referenceCues,
+    );
+
+    expect(result).toBeDefined();
+    expect(result?.cues).toHaveLength(22);
+    expect(result?.cues[0].startTime).toBeCloseTo(referenceCues[0].startTime, 2);
+    expect(result?.cues[0].endTime).toBeCloseTo(referenceCues[0].endTime, 2);
+    expect(result?.cues[10].startTime).toBeCloseTo(referenceCues[10].startTime, 2);
   });
 });
 describe('Japanese display migration and input validation', () => {
