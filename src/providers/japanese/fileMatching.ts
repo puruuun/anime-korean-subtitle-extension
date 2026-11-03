@@ -15,10 +15,22 @@ export function japaneseFileCandidate(
   // Jimaku also hosts subtitles in other languages. Do not mistake an English upload for JA.
   if (/(?:^|[\s._-])(?:en|eng|english|ko|kor|korean|chs|cht|zh)(?:$|[\s._-])/i.test(file.name))
     return undefined;
-  const parsed = filenameEpisode(file.name);
-  if (!parsed || parsed.episode !== normalizeEpisode(c.episode)) return undefined;
+  const parsed = filenameEpisode(file.name, c.season);
+  const targetEpisode = normalizeEpisode(c.episode);
+  const cumulativeEpisode =
+    !c.episodeType && Number.isSafeInteger(c.episodeOffset) && Number(c.episodeOffset) > 0
+      ? normalizeEpisode(Number(c.episode) + Number(c.episodeOffset))
+      : undefined;
+  if (
+    !parsed ||
+    !targetEpisode ||
+    (parsed.episode !== targetEpisode &&
+      (!cumulativeEpisode || parsed.episode !== cumulativeEpisode))
+  )
+    return undefined;
   if (parsed.special ? parsed.special !== c.episodeType : !!c.episodeType) return undefined;
-  const season = parsed.season ?? titleSignature(entry.title).season;
+  const season =
+    parsed.season ?? titleSignature(file.name).season ?? titleSignature(entry.title).season;
   if (season !== undefined && season !== (c.season ?? titleSignature(c.title).season ?? 1))
     return undefined;
   const year = file.name.match(/\b((?:19|20)\d{2})\b/)?.[1];
@@ -32,7 +44,7 @@ export function japaneseFileCandidate(
     filename: file.name,
     downloadUrl: file.url,
     language: 'ja',
-    episode: parsed.episode,
+    episode: targetEpisode,
     episodeType: c.episodeType,
     season: season ?? c.season,
     year: year ? Number(year) : undefined,

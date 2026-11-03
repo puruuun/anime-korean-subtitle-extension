@@ -77,6 +77,7 @@ export function ensureJapanese(tabId: number, j: Job, deps: JapaneseCoordinatorD
         controller.signal,
         () => collectSubtitles(tabId),
         skipExternal,
+        j.cues,
       );
       if (!deps.active(tabId, j) || controller.signal.aborted || j.japaneseController !== controller)
         return;

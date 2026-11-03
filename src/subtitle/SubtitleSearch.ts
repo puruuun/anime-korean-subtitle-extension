@@ -2,6 +2,7 @@ import type { AnimeContext } from '../anime/AnimeContext';
 import { normalizeTitle, titleCandidates } from '../anime/titleNormalizer';
 import type { SourceLanguage, SubtitleSearchResult } from '../providers/SubtitleProvider';
 import { normalizeEpisode } from '../anime/episodeNormalizer';
+
 export function scoreResult(
   c: AnimeContext,
   r: SubtitleSearchResult,
@@ -29,6 +30,27 @@ export function scoreResult(
   if (episodeMatches) add(50, '회차 일치');
   if (c.year && r.year === c.year) add(10, '연도 일치');
   if (r.language === language) add(100, '언어 일치');
+
+  const releaseText = [r.release, r.filename].filter(Boolean).join(' ');
+  if (
+    /(?:^|[\s._([\]-])(?:webrip|web-dl|webdl|netflix|nf|dmmtv|amzn|amazon|crunchyroll|b-global|abema|danime|retimed)(?:$|[\s._)\]-])/i.test(
+      releaseText,
+    )
+  ) {
+    add(40, '웹 스트리밍 소스');
+  }
+  if (
+    !/(?:^|[\s._([\]-])retimed(?:$|[\s._)\]-])/i.test(releaseText) &&
+    /(?:^|[\s._([\]-])(?:at-x|cbc(?:\s*tv)?|tbs(?:\s*tv)?|bs11|bsn|tokyo\s*mx|mbs|tv\s*tokyo|sun\s*tv|kbs|shincaps|nanakoraws|mpeg2)(?:$|[\s._)\]-])/i.test(
+      releaseText,
+    )
+  ) {
+    add(-25, 'TV 방송 캡처 오프셋 가능성');
+  }
+  if (language === 'ja' && /\.srt$/i.test(r.filename ?? r.release ?? '')) {
+    add(5, 'SRT 포맷 우선');
+  }
+
   const conflict =
     (r.episode !== undefined && !episodeMatches) ||
     (c.season !== undefined && r.season !== undefined && c.season !== r.season);
