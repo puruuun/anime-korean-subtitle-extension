@@ -27,6 +27,9 @@
     "https://*.blogspot.com/*",
     "https://*.tistory.com/*",
     "https://blog.kakaocdn.net/*",
+    "https://*.naver.com/*",
+    "https://*.naver.net/*",
+    "https://*.pstatic.net/*",
     "https://drive.google.com/*",
     "https://drive.usercontent.google.com/*",
     "https://api.github.com/*"

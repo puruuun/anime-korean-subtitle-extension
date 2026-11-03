@@ -2,6 +2,36 @@ import { unzipSync } from 'fflate';
 import { filenameEpisode, normalizeEpisode } from '../anime/episodeNormalizer';
 import { AppError } from '../utils/errors';
 import { zipNames } from './zipNames';
+
+const BONUS_PATTERN = /\b(?:ncop|nced|op|ed|pv|cm|menu|preview|credit|특전|예고|오프닝|엔딩)\b/i;
+const WEB_BD_PATTERN =
+  /(?:^|[\s._([\/\-])(?:webrip|web-dl|webdl|bd|bdrip|bluray|blu-ray|netflix|nf|dmmtv|amzn|crunchyroll|retimed)(?:$|[\s._)\/\-])/i;
+const TV_CAPTURE_PATTERN =
+  /(?:^|[\s._([\/\-])(?:at-x|cbc|tbs|bs11|bsn|tokyo\s*mx|mbs|tv\s*tokyo|sun\s*tv|kbs|shincaps|nanakoraws|mpeg2)(?:$|[\s._)\/\-])/i;
+
+export function rankArchiveEntry(name: string, language: 'ko' | 'ja' = 'ko'): number {
+  let score = 0;
+  if (WEB_BD_PATTERN.test(name)) score += 40;
+  if (!/(?:^|[\s._([\/\-])retimed(?:$|[\s._)\/\-])/i.test(name) && TV_CAPTURE_PATTERN.test(name)) {
+    score -= 25;
+  }
+  const ext = name.split('.').at(-1)?.toLowerCase() ?? '';
+  if (language === 'ko') {
+    if (ext === 'smi') score += 6;
+    else if (ext === 'srt') score += 5;
+    else if (ext === 'ass') score += 4;
+    else if (ext === 'ssa') score += 3;
+    else if (ext === 'vtt') score += 2;
+  } else {
+    if (ext === 'srt') score += 6;
+    else if (ext === 'ass') score += 5;
+    else if (ext === 'ssa') score += 4;
+    else if (ext === 'vtt') score += 3;
+    else if (ext === 'smi') score += 2;
+  }
+  return score;
+}
+
 export function extractSubtitle(
   buffer: ArrayBuffer,
   episode: number,
@@ -35,12 +65,30 @@ export function extractSubtitle(
       (parsed.season === undefined || parsed.season === season)
     );
   });
-  const chosen =
-    matching.length === 1
-      ? matching[0]
-      : names.length === 1 && !requireEpisodeMatch
-        ? names[0]
-        : undefined;
+
+  let candidateMatching = matching;
+  if (candidateMatching.length > 1) {
+    const nonBonus = candidateMatching.filter((n) => !BONUS_PATTERN.test(n.split('/').at(-1)!));
+    if (nonBonus.length > 0) {
+      candidateMatching = nonBonus;
+    }
+  }
+
+  let chosen: string | undefined;
+  const distinctEpisodes = new Set(
+    candidateMatching
+      .map((n) => filenameEpisode(n.split('/').at(-1)!, season)?.episode)
+      .filter(Boolean),
+  );
+  if (distinctEpisodes.size === 1) {
+    const sorted = [...candidateMatching].sort(
+      (a, b) => rankArchiveEntry(b, language) - rankArchiveEntry(a, language) || a.localeCompare(b),
+    );
+    chosen = sorted[0];
+  } else if (names.length === 1 && !requireEpisodeMatch) {
+    chosen = names[0];
+  }
+
   if (!chosen)
     throw new AppError(
       'ARCHIVE',
