@@ -1,17 +1,17 @@
-# Anime Korean Subtitle v0.5.3
+# Anime Korean Subtitle v0.5.4
 
 Miruro / Re:ANIME의 현재 작품과 회차를 감지하고 한국어 자막을 준비하는 Chrome Manifest V3 확장프로그램입니다. 영상·오디오는 다운로드하거나 전사하지 않습니다.
 
 ## 다른 컴퓨터에 설치
 
-1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.5.3.zip`을 받습니다.
+1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.5.4.zip`을 받습니다.
 2. ZIP을 폴더에 압축 해제합니다. 그 폴더의 `extension/manifest.json`을 확인합니다.
 3. Chrome에서 `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
 4. **압축해제된 확장 프로그램 로드**를 눌러 `extension` 폴더를 선택합니다.
 5. 설정에서 **Local LLM** 또는 **Gemini API**를 연결합니다. 한국어 원본 자막에는 번역 서버가 필요 없습니다.
 6. Miruro / Re:ANIME 회차를 열거나 새로고침합니다. 회차 선택만으로 자막 검색·다운로드·번역·적용이 자동 실행됩니다.
 
-기본 ZIP은 **개인용** 빌드입니다. 설치 시 모든 웹사이트 접근 권한(`<all_urls>`)을 사용하며 재생 중 별도의 권한 창을 요청하지 않습니다. 제한된 권한이 필요하면 `anime-korean-subtitle-public-v0.5.3.zip`을 사용하세요. 공개용의 알려지지 않은 배포·플레이어·번역 서버는 재생 전에 설정의 초기 접근 설정에서 한 번 승인합니다. AUTO가 대신 권한 창을 띄우지 않습니다.
+기본 ZIP은 **개인용** 빌드입니다. 설치 시 모든 웹사이트 접근 권한(`<all_urls>`)을 사용하며 재생 중 별도의 권한 창을 요청하지 않습니다. 제한된 권한이 필요하면 `anime-korean-subtitle-public-v0.5.4.zip`을 사용하세요. 공개용의 알려지지 않은 배포·플레이어·번역 서버는 재생 전에 설정의 초기 접근 설정에서 한 번 승인합니다. AUTO가 대신 권한 창을 띄우지 않습니다.
 
 확장 폴더는 설치 후에도 삭제하지 마세요. 업데이트 때는 같은 폴더를 새 버전으로 바꾸고 확장 페이지에서 새로고침하세요. 로그인 정보·개인 API Key는 배포 ZIP에 포함하지 않습니다.
 
