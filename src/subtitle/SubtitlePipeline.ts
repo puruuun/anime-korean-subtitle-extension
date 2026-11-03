@@ -34,21 +34,86 @@ export class SubtitlePipeline {
     private signal: AbortSignal,
     private embedded?: () => Promise<SubtitleSource[]>,
   ) {}
+
+  private handleCandidateError(candidate: SubtitleSearchResult, error: unknown) {
+    if (error instanceof SubtitleLinkUnavailable) {
+      Object.assign(candidate, {
+        pageUrl: error.resolution.pageUrl,
+        requiredOrigins: error.resolution.requiredOrigins,
+        linkMessage: error.message,
+      });
+      for (const origin of error.resolution.requiredOrigins ?? []) this.blockedOrigins.add(origin);
+      if (this.blockedOrigins.size)
+        this.status({
+          stage: 'search',
+          message: '다음 자막 소스를 확인하는 중...',
+          warnings: ['배포 도메인 접근이 차단되어 있습니다. 설정에서 사이트 접근을 확인하세요.'],
+        });
+    } else {
+      candidate.linkMessage =
+        error instanceof AppError
+          ? error.message
+          : '자막 파일을 처리하지 못했습니다. 배포 페이지를 확인하세요.';
+    }
+    log(candidate.providerId, {
+      usable: false,
+      reason: error instanceof Error ? error.message : 'unknown',
+    });
+  }
+
   private async korean(
     c: AnimeContext,
     manual: boolean,
     selected?: SubtitleSearchResult,
   ): Promise<PipelineResult | undefined> {
     const provider = this.providers.find((p) => p.id === 'anissia');
-    if (!provider) return undefined;
-    this.status({ stage: 'search', message: 'Anissia 한국어 자막을 찾는 중...', path: 'Anissia' });
+    const webProvider =
+      this.providers.find((p) => p.id === 'web-ko') ??
+      (provider as { webFallback?: SubtitleProvider } | undefined)?.webFallback;
+
+    if (!provider && !webProvider) return undefined;
+
+    const deadlineMs = manual ? 30000 : webProvider ? 15000 : 10000;
     let candidates: SubtitleSearchResult[] = [];
     let resolved = false;
+
     try {
-      return await withDeadline(this.signal, manual ? 30000 : 10000, async (signal) => {
-        candidates = selected
-          ? [selected]
-          : (await provider.search(c, 'ko', signal))
+      return await withDeadline(this.signal, deadlineMs, async (signal) => {
+        if (selected) {
+          const targetProvider =
+            selected.providerId === 'web-ko' && webProvider
+              ? webProvider
+              : (provider ?? webProvider)!;
+          candidates = [selected];
+          signal.throwIfAborted();
+          this.status({
+            stage: 'download',
+            message: '한국어 자막 다운로드·회차 확인 중 · ' + (selected.author ?? selected.release),
+            path: selected.providerId === 'web-ko' ? 'Web Search (KO)' : 'Anissia',
+          });
+          if (normalizeEpisode(selected.episode) !== normalizeEpisode(c.episode))
+            throw new AppError('EPISODE', '선택한 자막 후보의 회차가 현재 영상과 다릅니다.');
+          const usable = await loadUsableSubtitle(targetProvider, selected, c, signal);
+          resolved = true;
+          this.status({
+            stage: 'source',
+            message:
+              selected.providerId === 'web-ko'
+                ? '웹 한국어 자막 사용 중'
+                : 'Anissia 한국어 자막 사용 중',
+            source: selected.providerId,
+          });
+          return { cues: usable.cues, language: 'ko', source: selected.providerId };
+        }
+
+        if (provider) {
+          this.status({
+            stage: 'search',
+            message: 'Anissia 한국어 자막을 찾는 중...',
+            path: 'Anissia',
+          });
+          try {
+            const anissiaHits = (await provider.search(c, 'ko', signal))
               .map((r) => scoreResult(c, r, 'ko'))
               .sort(
                 (a, b) =>
@@ -56,59 +121,95 @@ export class SubtitlePipeline {
                   (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '') ||
                   a.id.localeCompare(b.id),
               );
-        for (const candidate of candidates.filter((r) => selected || r.autoEligible).slice(0, 8)) {
-          signal.throwIfAborted();
-          try {
-            this.status({
-              stage: 'download',
-              message:
-                '한국어 자막 다운로드·회차 확인 중 · ' + (candidate.author ?? candidate.release),
-              path: 'Anissia',
-            });
-            if (normalizeEpisode(candidate.episode) !== normalizeEpisode(c.episode))
-              throw new AppError('EPISODE', '선택한 자막 후보의 회차가 현재 영상과 다릅니다.');
-            const usable = await loadUsableSubtitle(provider, candidate, c, signal);
-            resolved = true;
-            this.status({
-              stage: 'source',
-              message: 'Anissia 한국어 자막 사용 중',
-              source: 'anissia',
-            });
-            return { cues: usable.cues, language: 'ko', source: 'anissia' };
+            candidates.push(...anissiaHits);
+
+            for (const candidate of anissiaHits.filter((r) => r.autoEligible).slice(0, 8)) {
+              signal.throwIfAborted();
+              try {
+                this.status({
+                  stage: 'download',
+                  message:
+                    '한국어 자막 다운로드·회차 확인 중 · ' +
+                    (candidate.author ?? candidate.release),
+                  path: 'Anissia',
+                });
+                if (normalizeEpisode(candidate.episode) !== normalizeEpisode(c.episode))
+                  throw new AppError('EPISODE', '선택한 자막 후보의 회차가 현재 영상과 다릅니다.');
+                const usable = await loadUsableSubtitle(provider, candidate, c, signal);
+                resolved = true;
+                this.status({
+                  stage: 'source',
+                  message: 'Anissia 한국어 자막 사용 중',
+                  source: 'anissia',
+                });
+                return { cues: usable.cues, language: 'ko', source: 'anissia' };
+              } catch (error) {
+                signal.throwIfAborted();
+                this.handleCandidateError(candidate, error);
+              }
+            }
           } catch (error) {
             signal.throwIfAborted();
-            if (error instanceof SubtitleLinkUnavailable) {
-              Object.assign(candidate, {
-                pageUrl: error.resolution.pageUrl,
-                requiredOrigins: error.resolution.requiredOrigins,
-                linkMessage: error.message,
-              });
-              for (const origin of error.resolution.requiredOrigins ?? [])
-                this.blockedOrigins.add(origin);
-              if (this.blockedOrigins.size)
-                this.status({
-                  stage: 'search',
-                  message: '다음 자막 소스를 확인하는 중...',
-                  warnings: [
-                    '배포 도메인 접근이 차단되어 있습니다. 설정에서 사이트 접근을 확인하세요.',
-                  ],
-                });
-            } else
-              candidate.linkMessage =
-                error instanceof AppError
-                  ? error.message
-                  : '자막 파일을 처리하지 못했습니다. 배포 페이지를 확인하세요.';
-            log('Anissia', {
-              usable: false,
-              reason: error instanceof Error ? error.message : 'unknown',
-            });
+            log('Anissia', { unavailable: error instanceof Error ? error.message : 'unknown' });
+            if (!webProvider && manual && !candidates.length) throw error;
           }
         }
+
+        if (webProvider) {
+          signal.throwIfAborted();
+          this.status({
+            stage: 'search',
+            message: '웹에서 한국어 자막 블로그를 찾는 중...',
+            path: 'Web Search (KO)',
+          });
+          try {
+            const webHits = (await webProvider.search(c, 'ko', signal))
+              .map((r) => scoreResult(c, r, 'ko'))
+              .sort(
+                (a, b) =>
+                  (b.score ?? 0) - (a.score ?? 0) ||
+                  (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '') ||
+                  a.id.localeCompare(b.id),
+              );
+            candidates.push(...webHits);
+
+            for (const candidate of webHits.filter((r) => r.autoEligible).slice(0, 6)) {
+              signal.throwIfAborted();
+              try {
+                this.status({
+                  stage: 'download',
+                  message:
+                    '한국어 자막 다운로드·회차 확인 중 · ' +
+                    (candidate.author ?? candidate.release),
+                  path: 'Web Search (KO)',
+                });
+                if (normalizeEpisode(candidate.episode) !== normalizeEpisode(c.episode))
+                  throw new AppError('EPISODE', '선택한 자막 후보의 회차가 현재 영상과 다릅니다.');
+                const usable = await loadUsableSubtitle(webProvider, candidate, c, signal);
+                resolved = true;
+                this.status({
+                  stage: 'source',
+                  message: '웹 한국어 자막 사용 중',
+                  source: 'web-ko',
+                });
+                return { cues: usable.cues, language: 'ko', source: 'web-ko' };
+              } catch (error) {
+                signal.throwIfAborted();
+                this.handleCandidateError(candidate, error);
+              }
+            }
+          } catch (error) {
+            signal.throwIfAborted();
+            log('WebKorean', { unavailable: error instanceof Error ? error.message : 'unknown' });
+            if (manual && !candidates.length) throw error;
+          }
+        }
+
         return undefined;
       });
     } catch (error) {
       this.signal.throwIfAborted();
-      log('Anissia', { unavailable: error instanceof Error ? error.message : 'unknown' });
+      log('KoreanPipeline', { unavailable: error instanceof Error ? error.message : 'unknown' });
       if (manual && !candidates.length) throw error;
       for (const candidate of candidates)
         candidate.linkMessage ??=
@@ -124,6 +225,7 @@ export class SubtitlePipeline {
         );
     }
   }
+
   private async japanese(c: AnimeContext): Promise<PipelineResult | undefined> {
     this.status({
       stage: 'search',

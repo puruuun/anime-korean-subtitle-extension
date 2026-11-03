@@ -112,8 +112,9 @@ export class SubtitleCore {
     if (result.language === 'ko') {
       this.status({
         stage: 'source',
-        message: 'Anissia 한국어 자막 사용 중',
-        path: 'Anissia',
+        message:
+          result.source === 'web-ko' ? '웹 한국어 자막 사용 중' : 'Anissia 한국어 자막 사용 중',
+        path: result.source === 'web-ko' ? 'Web Search (KO)' : 'Anissia',
         source: result.source,
       });
       return result.cues;

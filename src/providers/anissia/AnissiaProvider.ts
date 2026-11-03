@@ -76,6 +76,7 @@ export class AnissiaProvider implements SubtitleProvider {
     private resolver = new SubtitleLinkResolverChain(),
     private cache: Pick<Database, 'get' | 'put'> = database,
     private now: () => number = Date.now,
+    public readonly webFallback?: SubtitleProvider,
   ) {}
   private async schedules(signal = this.signal): Promise<AnissiaAnime[]> {
     const key = 'anissia:schedule:v1';

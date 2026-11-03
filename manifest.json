@@ -30,6 +30,9 @@
     "https://*.naver.com/*",
     "https://*.naver.net/*",
     "https://*.pstatic.net/*",
+    "https://www.wikidata.org/*",
+    "https://customsearch.googleapis.com/*",
+    "https://html.duckduckgo.com/*",
     "https://drive.google.com/*",
     "https://drive.usercontent.google.com/*",
     "https://api.github.com/*"

@@ -110,3 +110,31 @@ describe('source settings migration', () => {
     }
   });
 });
+
+describe('Google Custom Search settings', () => {
+  it('normalizes, persists and validates optional Google Custom Search credentials', async () => {
+    const raw = {
+      googleSearch: { apiKey: 'test-api-key', cx: 'test-cx-id' },
+    };
+    const set = vi.fn();
+    vi.stubGlobal('chrome', {
+      storage: { local: { get: async () => ({ settings: raw }), set } },
+    });
+    const settings = await getSettings();
+    expect(settings.googleSearch).toEqual({ apiKey: 'test-api-key', cx: 'test-cx-id' });
+    expect(() => validateSettings(settings)).not.toThrow();
+
+    expect(() =>
+      validateSettings({
+        ...settings,
+        googleSearch: { apiKey: 123 as unknown as string, cx: 'test' },
+      }),
+    ).toThrow('자막 설정을 확인하세요.');
+    expect(() =>
+      validateSettings({
+        ...settings,
+        googleSearch: { apiKey: 'test', cx: null as unknown as string },
+      }),
+    ).toThrow('자막 설정을 확인하세요.');
+  });
+});

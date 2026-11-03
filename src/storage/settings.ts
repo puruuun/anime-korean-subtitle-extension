@@ -3,6 +3,7 @@ export interface Settings {
   schemaVersion: 2;
   autoSources: { anissia: boolean; japaneseTranslation: boolean; embeddedEnglish: boolean };
   jimaku: { apiKey: string };
+  googleSearch: { apiKey: string; cx: string };
   mode: 'ko' | 'ja' | 'en' | 'auto';
   autoApply: boolean;
   translation: {
@@ -32,6 +33,7 @@ export const defaultSettings: Settings = {
   autoApply: true,
   autoSources: { anissia: true, japaneseTranslation: true, embeddedEnglish: true },
   jimaku: { apiKey: '' },
+  googleSearch: { apiKey: '', cx: '' },
   translation: {
     provider: 'lmstudio',
     geminiApiKey: '',
@@ -75,6 +77,7 @@ export function normalizeSettings(settings?: Partial<Settings>): Settings {
         : 'auto',
     autoSources: known(defaultSettings.autoSources, settings?.autoSources),
     jimaku: known(defaultSettings.jimaku, settings?.jimaku),
+    googleSearch: known(defaultSettings.googleSearch, settings?.googleSearch),
     translation,
     display: known(defaultDisplay, settings?.display),
     debug: settings?.debug === true,
@@ -92,7 +95,9 @@ export function validateSettings(s: Settings) {
     !['auto', 'ko', 'ja', 'en'].includes(s.mode) ||
     typeof s.autoApply !== 'boolean' ||
     Object.values(s.autoSources).some((v) => typeof v !== 'boolean') ||
-    typeof s.jimaku.apiKey !== 'string'
+    typeof s.jimaku.apiKey !== 'string' ||
+    (s.googleSearch !== undefined &&
+      (typeof s.googleSearch?.apiKey !== 'string' || typeof s.googleSearch?.cx !== 'string'))
   )
     throw Error('자막 설정을 확인하세요.');
   const u = new URL(s.translation.baseUrl);
