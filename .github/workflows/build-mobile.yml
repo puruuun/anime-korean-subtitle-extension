@@ -98,7 +98,7 @@ jobs:
           xcrun safari-web-extension-converter dist \
             --project-location ios-project \
             --app-name "WebVideoSubtitle" \
-            --bundle-identifier "io.github.puruuun.webvideosubtitle" \
+            --bundle-identifier "io.github.puruuun.WebVideoSubtitle" \
             --ios-only \
             --no-open \
             --no-prompt \
