@@ -615,3 +615,9 @@ select:focus-visible {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.local-subtitle .label-heading {
+  margin: 0 0 8px;
+}
+.local-subtitle .check {
+  margin: 0;
+}

@@ -5,6 +5,10 @@ import type { JobStatus } from '../../background/messageRouter';
 import { isSpecializedSite, isWebVideoUrl } from '../../sites/adapter';
 import type { Settings } from '../../storage/settings';
 import type { Mode } from '../../subtitle/SubtitleCore';
+import {
+  MAX_LOCAL_SUBTITLE_BYTES,
+  encodeBytesToBase64,
+} from '../../subtitle/localSubtitle';
 import type { TranslationBufferStatus } from '../../translation/TranslationQueue';
 import { requestHost, send } from '../api';
 import { workElapsedSeconds, workPending } from '../../background/jobClock';
@@ -123,6 +127,8 @@ function Popup() {
   const [genericActive, setGenericActive] = useState(false);
   const [autoHostEnabled, setAutoHostEnabled] = useState(false);
   const [togglingAutoHost, setTogglingAutoHost] = useState(false);
+  const [localTranslate, setLocalTranslate] = useState(false);
+  const localInputRef = useRef<HTMLInputElement>(null);
   const japanesePending = useRef(false);
   const japaneseRevision = useRef(0);
   const personal = Boolean(chrome.runtime.getManifest().host_permissions?.includes('<all_urls>'));
@@ -365,6 +371,79 @@ function Popup() {
       setChangingJapanese(false);
     }
   }
+  async function loadLocalFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    if (!file || tabId === undefined) return;
+    if (file.size > MAX_LOCAL_SUBTITLE_BYTES) {
+      setError('자막 파일 크기는 최대 5MB까지 지원합니다.');
+      input.value = '';
+      return;
+    }
+    setError('');
+    setWorking(true);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const base64 = encodeBytesToBase64(bytes);
+      let targetContext = context;
+      if (isGenericSite && genericUrl) {
+        await requestHost(genericUrl);
+        await send({ type: 'ACTIVATE_GENERIC_TAB', tabId });
+        setGenericActive(true);
+        const contextResult = await chrome.tabs
+          .sendMessage(tabId, { type: 'CONTEXT' }, { frameId: 0 })
+          .catch(() => null);
+        if (contextResult?.ok) {
+          targetContext = contextResult.context as AnimeContext;
+          acceptContext(targetContext);
+        }
+      }
+      const r = await send<{ status: JobStatus }>({
+        type: 'LOAD_LOCAL_SUBTITLE',
+        tabId,
+        context: targetContext,
+        fileName: file.name,
+        base64,
+        translate: localTranslate,
+      });
+      setStatus(r.status);
+      await refresh(tabId, true, true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      input.value = '';
+      setWorking(false);
+    }
+  }
+  const localSubtitleSection = (
+    <section className="local-subtitle">
+      <p className="label-heading">로컬 자막 파일 불러오기</p>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={localTranslate}
+          disabled={busy}
+          onChange={(e) => setLocalTranslate(e.target.checked)}
+        />
+        목표 언어로 AI 번역
+      </label>
+      <input
+        ref={localInputRef}
+        type="file"
+        hidden
+        accept=".srt,.ass,.ssa,.smi,.sami,.vtt"
+        onChange={(e) => void loadLocalFile(e)}
+      />
+      <button
+        type="button"
+        className="secondary full"
+        disabled={busy || tabId === undefined}
+        onClick={() => localInputRef.current?.click()}
+      >
+        자막 파일 선택 (.srt, .ass, .smi, .vtt)
+      </button>
+    </section>
+  );
   return (
     <main className="popup">
       <section className="work-status" role="status" aria-live="polite" aria-label="현재 작업 상태">
@@ -506,6 +585,7 @@ function Popup() {
             />
             이 사이트에서 항상 자동 적용
           </label>
+          {localSubtitleSection}
           <section className="sync">
             <div className="row">
               <strong>자막 싱크</strong>
@@ -731,6 +811,7 @@ function Popup() {
               </div>
             </div>
           ))}
+        {localSubtitleSection}
         <section className="sync">
           <div className="row">
             <strong>자막 싱크</strong>

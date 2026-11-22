@@ -124,7 +124,8 @@ function persistRender(tabId: number, j: Job) {
   const snapshot = renderSnapshot(j);
   return enqueue(tabId, j, async () => {
     await chrome.storage.session.set({ ['render:' + tabId]: snapshot });
-    if (j.cues.length && j.status.source)
+    // Local file subtitles are session-only so they do not overwrite cached online episodes.
+    if (j.cues.length && j.status.source && j.status.source !== 'local-file')
       await episodeCache.put(j.cacheKey, {
         context: j.status.context,
         cues: j.cues,
@@ -247,6 +248,68 @@ export async function currentStatus(tabId: number): Promise<JobStatus | undefine
         stored.updatedAt,
       )
     : stored;
+}
+function createProgressiveHooks(
+  tabId: number,
+  j: Job,
+  epoch: number,
+  s: Settings,
+  trackJapanese = true,
+) {
+  return {
+    onSource: async (result: { cues: SubtitleCue[]; language: string; source: string }) => {
+      if (!active(tabId, j)) return;
+      j.sourceLanguage = sameBaseLanguage(result.language, s.targetLanguage)
+        ? undefined
+        : result.language;
+      if (trackJapanese && result.language === 'ja') {
+        j.japaneseCues = result.cues;
+        j.japaneseSource = result.source;
+      }
+      if (trackJapanese) maybeEnsureJapanese(tabId, j);
+    },
+    onStart: async (original: SubtitleCue[], language: string, queue: TranslationQueue) => {
+      if (!active(tabId, j)) return;
+      j.queue = queue;
+      j.sourceLanguage = language;
+      j.originalCues = original;
+      if (trackJapanese && language === 'ja') {
+        j.japaneseCues = original;
+        j.japaneseSource = j.status.source;
+        maybeEnsureJapanese(tabId, j);
+      }
+      await readPlayback(tabId, j);
+      await persistRender(tabId, j);
+      if (!active(tabId, j)) return;
+      if (j.bootstrapReady) return;
+      await sendVideoMessage(tabId, {
+        type: 'PREPARE',
+        epoch,
+        immediatePlayback: s.translation.immediatePlayback,
+        sourceLanguage: language,
+      });
+    },
+    onChunk: async (
+      delta: SubtitleCue[],
+      snapshot: NonNullable<JobStatus['translation']>,
+    ) => {
+      if (!active(tabId, j)) return;
+      const store = new Map(j.cues.map((cue) => [cue.id, cue]));
+      for (const cue of delta) store.set(cue.id, cue);
+      j.cues = [...store.values()].sort((a, b) => a.startTime - b.startTime || a.id - b.id);
+      j.status.translation = snapshot;
+      await persistRender(tabId, j);
+      if (!active(tabId, j)) return;
+      await sendVideoMessage(tabId, {
+        type: 'APPEND',
+        cues: delta,
+        display: s.display,
+        offset: j.status.offset,
+        epoch,
+      });
+      if (snapshot.chunks[0]?.state === 'completed') await releaseBootstrap(tabId, j);
+    },
+  };
 }
 async function startJobInternal(
   tabId: number,
@@ -396,57 +459,7 @@ async function startJobInternal(
         },
         j.controller.signal,
         () => collectSubtitles(tabId, c.site === 'generic' ? 'any' : undefined),
-        {
-          onSource: async (result) => {
-            if (!active(tabId, j)) return;
-            j.sourceLanguage = sameBaseLanguage(result.language, s.targetLanguage)
-              ? undefined
-              : result.language;
-            if (result.language === 'ja') {
-              j.japaneseCues = result.cues;
-              j.japaneseSource = result.source;
-            }
-            maybeEnsureJapanese(tabId, j);
-          },
-          onStart: async (original, language, queue) => {
-            if (!active(tabId, j)) return;
-            j.queue = queue;
-            j.sourceLanguage = language;
-            j.originalCues = original;
-            if (language === 'ja') {
-              j.japaneseCues = original;
-              j.japaneseSource = j.status.source;
-              maybeEnsureJapanese(tabId, j);
-            }
-            await readPlayback(tabId, j);
-            await persistRender(tabId, j);
-            if (!active(tabId, j)) return;
-            if (j.bootstrapReady) return;
-            await sendVideoMessage(tabId, {
-              type: 'PREPARE',
-              epoch,
-              immediatePlayback: s.translation.immediatePlayback,
-              sourceLanguage: language,
-            });
-          },
-          onChunk: async (delta, snapshot) => {
-            if (!active(tabId, j)) return;
-            const store = new Map(j.cues.map((cue) => [cue.id, cue]));
-            for (const cue of delta) store.set(cue.id, cue);
-            j.cues = [...store.values()].sort((a, b) => a.startTime - b.startTime || a.id - b.id);
-            j.status.translation = snapshot;
-            await persistRender(tabId, j);
-            if (!active(tabId, j)) return;
-            await sendVideoMessage(tabId, {
-              type: 'APPEND',
-              cues: delta,
-              display: s.display,
-              offset: j.status.offset,
-              epoch,
-            });
-            if (snapshot.chunks[0]?.state === 'completed') await releaseBootstrap(tabId, j);
-          },
-        },
+        createProgressiveHooks(tabId, j, epoch, s),
       );
       const cues = await core.run(
         c,
@@ -687,6 +700,152 @@ export function startJob(
 }
 export function cancelJob(tabId: number, stopFollow = true) {
   return exclusive(tabId, () => cancelJobInternal(tabId, stopFollow));
+}
+export function applyLocalSubtitle(
+  tabId: number,
+  context: AnimeContext,
+  cues: SubtitleCue[],
+  options: { fileName: string; translate?: boolean; sourceLanguage?: string },
+): Promise<JobStatus> {
+  return exclusive(tabId, async () => {
+    const tab = await chrome.tabs.get(tabId);
+    if (!(await isTabSupported(tabId, tab.url))) {
+      throw new AppError('SITE', '지원하는 영상 페이지에서 사용하세요.');
+    }
+    const frames = await videoFrames(tabId);
+    if (!frames.length) {
+      throw new AppError(
+        'VIDEO',
+        '영상 플레이어를 기다리고 있습니다. 사이트 서버 상태도 확인하세요.',
+      );
+    }
+    clearNavigationTimer(tabId);
+    const automatic = autoEpisodes.get(tabId);
+    if (automatic) automatic.stopped = true;
+    autoEpisodes.delete(tabId);
+    await chrome.storage.session.remove('automatic:' + tabId);
+    const previous = jobs.get(tabId);
+    if (previous) {
+      previous.japaneseController?.abort();
+      await cancelJobInternal(tabId, false);
+    }
+    const s = await getSettings();
+    const offset = await getOffset(context);
+    const epoch = await nextEpoch(tabId);
+    await clearFrames(tabId, epoch);
+    const translate = options.translate === true;
+    const pathLabel = 'Local File · ' + options.fileName;
+    const j: Job = {
+      controller: new AbortController(),
+      cues: [],
+      settings: s,
+      writes: Promise.resolve(),
+      primaryFrame: frames[0].frameId,
+      primaryDocument: frames[0].documentId,
+      playbackTime: 0,
+      bootstrapReady: false,
+      cacheKey: episodeCacheKey(context, s, translate ? 'auto' : 'ko'),
+      status: {
+        jobId: crypto.randomUUID(),
+        context,
+        mode: translate ? 'auto' : 'ko',
+        busy: translate,
+        epoch,
+        offset,
+        updatedAt: Date.now(),
+        stage: translate ? 'translate' : 'done',
+        message: translate
+          ? '로컬 자막 번역 준비 중 · ' + options.fileName
+          : '로컬 자막 적용 완료 · ' + options.fileName,
+        path: pathLabel,
+        source: 'local-file',
+        episodeKey: episodeKey(context),
+        startedAt: Date.now(),
+        workElapsedMs: 0,
+        workActiveSince: translate ? Date.now() : undefined,
+        japanese: { state: 'off', message: '일본어 추가 자막 꺼짐' },
+        playbackTime: 0,
+      },
+    };
+    jobs.set(tabId, j);
+    if (!translate) {
+      j.cues = cues;
+      j.sourceLanguage = s.targetLanguage;
+      j.bootstrapReady = true;
+      await applyCues(tabId, cues, s.display, offset, epoch, s.targetLanguage);
+      await publish(tabId, j, {
+        stage: 'done',
+        message: '로컬 자막 적용 완료 · ' + options.fileName,
+        path: pathLabel,
+        source: 'local-file',
+      });
+      await persistRender(tabId, j);
+      return uiStatus(j.status);
+    }
+    await publish(tabId, j, {
+      stage: 'translate',
+      message: '로컬 자막 번역 준비 중 · ' + options.fileName,
+      path: pathLabel,
+      source: 'local-file',
+    });
+    await setBusy(tabId, true, epoch);
+    void (async () => {
+      try {
+        setDebug(s.debug);
+        const core = new SubtitleCore(
+          [],
+          s,
+          (st) => {
+            const patched =
+              st.source === 'local-file' && st.path
+                ? { ...st, path: st.path.replace(/^Web Search \(KO\)/, pathLabel) }
+                : st;
+            void publish(tabId, j, patched);
+            if (patched.translation?.chunks[0]?.state === 'failed') void releaseBootstrap(tabId, j);
+          },
+          j.controller.signal,
+          undefined,
+          createProgressiveHooks(tabId, j, epoch, s, false),
+        );
+        const translated = await core.run(context, 'auto', undefined, {
+          cues,
+          language: options.sourceLanguage || 'und',
+          source: 'local-file',
+        });
+        j.controller.signal.throwIfAborted();
+        if (!active(tabId, j)) return;
+        if (!j.queue) {
+          j.cues = translated;
+          j.bootstrapReady = true;
+          await applyCues(tabId, translated, s.display, j.status.offset, epoch, s.targetLanguage);
+        }
+        await releaseBootstrap(tabId, j);
+        j.status.busy = false;
+        const failures = j.queue?.snapshot().failedChunks ?? 0;
+        await publish(tabId, j, {
+          stage: failures ? 'partial' : 'done',
+          message: failures
+            ? '부분 번역 완료 · 실패한 ' +
+              failures +
+              '개 Chunk는 다시 적용하면 캐시부터 재시도합니다.'
+            : '로컬 자막 번역 및 적용 완료 · ' + options.fileName,
+          path: pathLabel,
+          source: 'local-file',
+          translation: j.queue?.snapshot(),
+          results: [],
+        });
+        await persistRender(tabId, j);
+      } catch (e) {
+        if (!active(tabId, j)) return;
+        j.status.busy = false;
+        await releaseBootstrap(tabId, j);
+        await publish(tabId, j, { stage: 'error', message: errorText(e) });
+      } finally {
+        if (active(tabId, j)) await setBusy(tabId, false, j.status.epoch);
+      }
+    })();
+    return uiStatus(j.status);
+  });
 }
 export function ensureAutomaticJob(tabId: number) {
   return exclusive(tabId, async () => {
