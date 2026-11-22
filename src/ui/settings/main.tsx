@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { defaultSettings, type Settings } from '../../storage/settings';
 import { send, requestHost } from '../api';
 import { ExtensionUpdates } from './ExtensionUpdates';
-import { openExtensionManager } from '../../platform/browser';
+import { detectBrowserFamily, openExtensionManager } from '../../platform/browser';
+import { getPermissionGuideCopy } from '../permissionGuide';
 import '../style.css';
 function SettingsPage() {
   const [s, setS] = useState<Settings>(structuredClone(defaultSettings));
@@ -12,7 +13,8 @@ function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [extraHost, setExtraHost] = useState('');
-  const personal = chrome.runtime.getManifest().host_permissions?.includes('<all_urls>');
+  const personal = Boolean(chrome.runtime.getManifest().host_permissions?.includes('<all_urls>'));
+  const guideCopy = getPermissionGuideCopy(detectBrowserFamily(), personal);
   useEffect(() => {
     void send<{ settings: Settings }>({ type: 'GET_SETTINGS' }).then(
       (r) => setS(r.settings),
@@ -108,36 +110,27 @@ function SettingsPage() {
             </button>
           </>
         )}
-        <button
-          className="text-button"
-          onClick={() => {
-            void openExtensionManager();
-          }}
-        >
-          Chrome 사이트 접근 설정
-        </button>
+        {guideCopy.showManagerButton && (
+          <button
+            className="text-button"
+            onClick={() => {
+              void openExtensionManager();
+            }}
+          >
+            {guideCopy.settingsButtonLabel}
+          </button>
+        )}
         <div className="permission-guide">
           <h3>처음 설치한 뒤 이렇게 설정하세요</h3>
           <ol>
             <li>
-              <strong>확장프로그램을 켭니다.</strong>
-              <p>
-                위 링크를 누르면 이 확장프로그램의 세부정보가 열립니다. 사용 스위치를 켜세요. 목록
-                화면이 열렸다면 Anime Korean Subtitle 카드의 <strong>세부정보</strong>를 누릅니다.
-              </p>
+              <strong>{guideCopy.step1Title}</strong>
+              <p>{guideCopy.step1Body}</p>
             </li>
             <li>
-              <strong>사이트 액세스를 ‘모든 사이트에서’로 선택합니다.</strong>
-              <p>
-                세부정보의 <strong>사이트 액세스</strong>(또는 사이트 접근)에서{' '}
-                <strong>모든 사이트에서</strong>를 선택하세요. ‘선택 시’는 탭마다 확장을 눌러야
-                하므로 자동 자막이 시작되지 않습니다.
-              </p>
-              <p>
-                {personal
-                  ? '개인용 빌드는 영상 플레이어·외부 자막 배포 사이트·번역 서버를 읽기 위해 모든 웹사이트 접근이 필요합니다.'
-                  : '공개용 빌드에서 ‘모든 사이트에서’는 manifest에 선언된 지원 사이트에 모두 허용한다는 뜻입니다. 목록에 개별 허용 스위치가 표시되면 모두 켜세요. 새 외부 도메인은 위 ‘초기 접근 등록’으로 한 번 등록합니다.'}
-              </p>
+              <strong>{guideCopy.step2Title}</strong>
+              <p>{guideCopy.step2Body}</p>
+              <p>{guideCopy.step2ProfileNote}</p>
             </li>
             <li>
               <strong>여기서 자동 자막을 켜고 저장합니다.</strong>
@@ -157,23 +150,15 @@ function SettingsPage() {
             </li>
           </ol>
           <div className="guide-note">
-            <strong>시크릿 창에서도 보고 싶다면</strong>
-            <p>
-              Chrome 세부정보에서 <strong>시크릿 모드에서 허용</strong>을 추가로 켜세요. 일반 창만
-              쓰면 필요 없습니다. 웹 영상 자막에는 ‘파일 URL에 대한 액세스 허용’이 필요하지
-              않습니다.
-            </p>
+            <strong>{guideCopy.privateModeTitle}</strong>
+            <p>{guideCopy.privateModeBody}</p>
           </div>
           <p className="muted">
             저장소·탭·플레이어 처리 권한은 설치에 포함됩니다. 별도의 마이크·카메라 권한은 필요
             없습니다. 권한을 바꾼 뒤에는 영상 페이지를 새로고침하세요.
           </p>
-          <a
-            href="https://support.google.com/chrome/answer/2664769?hl=ko"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Chrome 공식 확장프로그램 권한 안내 ↗
+          <a href={guideCopy.helpUrl} target="_blank" rel="noreferrer">
+            {guideCopy.helpLabel}
           </a>
         </div>
       </section>

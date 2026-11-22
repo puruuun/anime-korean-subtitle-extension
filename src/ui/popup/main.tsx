@@ -6,7 +6,8 @@ import type { Mode } from '../../subtitle/SubtitleCore';
 import type { TranslationBufferStatus } from '../../translation/TranslationQueue';
 import { send } from '../api';
 import { workElapsedSeconds, workPending } from '../../background/jobClock';
-import { openExtensionManager } from '../../platform/browser';
+import { detectBrowserFamily, openExtensionManager } from '../../platform/browser';
+import { getPermissionGuideCopy } from '../permissionGuide';
 import '../style.css';
 const modes: { id: Mode; name: string; detail: string }[] = [
   { id: 'ko', name: '한국어 자막 검색', detail: '외부 한국어 자막을 그대로 적용' },
@@ -116,6 +117,8 @@ function Popup() {
   const [changingJapanese, setChangingJapanese] = useState(false);
   const japanesePending = useRef(false);
   const japaneseRevision = useRef(0);
+  const personal = Boolean(chrome.runtime.getManifest().host_permissions?.includes('<all_urls>'));
+  const guideCopy = getPermissionGuideCopy(detectBrowserFamily(), personal);
   function acceptContext(c: AnimeContext) {
     setContext(c);
     setTitle(c.title);
@@ -340,7 +343,7 @@ function Popup() {
               void openExtensionManager();
             }}
           >
-            Chrome 권한 설정 열기
+            {guideCopy.popupButtonLabel}
           </button>
         )}
         {status?.progress && <progress value={status.progress.done} max={status.progress.total} />}
