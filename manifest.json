@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Web Video Subtitle",
   "description": "외부 자막 검색·점진적 AI 번역·원문 동시 자막을 지원하는 범용 웹 비디오 자막 확장프로그램",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",

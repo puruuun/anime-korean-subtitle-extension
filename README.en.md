@@ -22,12 +22,12 @@ A cross-browser Manifest V3 extension that adds **external subtitle lookup, prog
 
 Download a build archive from [Releases](https://github.com/puruuun/web-video-subtitle-extension/releases):
 
-| Platform | Package (`v0.5.6`) | Permission Scope | Best For |
+| Platform | Package (`v0.5.7`) | Permission Scope | Best For |
 | :--- | :--- | :--- | :--- |
-| **Chrome / Android Chromium** | `web-video-subtitle-chrome-v0.5.6.zip` | Personal (`<all_urls>`) | Zero runtime permission prompts *(Recommended)* |
-| **Chrome / Android Chromium** | `web-video-subtitle-chrome-public-v0.5.6.zip` | Public (declared hosts) | Least-privilege setup with explicit per-host approval |
-| **Firefox (Desktop / Android)** | `web-video-subtitle-firefox-v0.5.6.xpi` | Personal / Public | Firefox Desktop & Nightly/Fennec Android |
-| **iOS Safari** | `WebVideoSubtitle-ios-v0.5.6-unsigned.ipa` | Personal / Public | Sideload via SideStore / AltStore / Sideloadly and enable in Safari Settings |
+| **Chrome / Android Chromium** | `web-video-subtitle-chrome-v0.5.7.zip` | Personal (`<all_urls>`) | Zero runtime permission prompts *(Recommended)* |
+| **Chrome / Android Chromium** | `web-video-subtitle-chrome-public-v0.5.7.zip` | Public (declared hosts) | Least-privilege setup with explicit per-host approval |
+| **Firefox (Desktop / Android)** | `web-video-subtitle-firefox-v0.5.7.xpi` | Personal / Public | Firefox Desktop & Nightly/Fennec Android |
+| **iOS Safari** | `WebVideoSubtitle-ios-v0.5.7-unsigned.ipa` | Personal / Public | Sideload via SideStore / AltStore / Sideloadly and enable in Safari Settings |
 
 1. Extract the ZIP archive and locate the `extension/manifest.json` folder.
 2. Open `chrome://extensions` in Chrome and enable **Developer mode**.
