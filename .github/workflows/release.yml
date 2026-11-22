@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release version tag (e.g. v0.5.5)'
+        description: 'Release version tag (e.g. v0.6.0)'
         required: true
         type: string
 
@@ -14,9 +14,12 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build-web:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.resolve_tag.outputs.tag }}
+      sha: ${{ steps.resolve_tag.outputs.sha }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,13 +34,19 @@ jobs:
           cache: 'npm'
 
       - name: Resolve release tag
+        id: resolve_tag
+        env:
+          RAW_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG="$RAW_TAG"
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Invalid tag format: $TAG. Expected format: vX.Y.Z"
             exit 1
           fi
+          SHA=$(git rev-parse HEAD)
           echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Verify tag and version consistency
         run: node scripts/verify-build-artifacts.mjs --version-only --expected-tag="${TAG}"
@@ -54,31 +63,183 @@ jobs:
       - name: Run unit tests
         run: npm test
 
-      - name: Build personal package
+      - name: Build and verify Chrome packages
         run: |
           npm run build:personal
-          mkdir -p release_stage/personal/extension
-          cp -r dist/* release_stage/personal/extension/
-
-      - name: Build public package
-        run: |
+          mkdir -p release_stage/chrome/personal/extension
+          cp -r dist/* release_stage/chrome/personal/extension/
           npm run build:public
-          mkdir -p release_stage/public/extension
-          cp -r dist/* release_stage/public/extension/
+          mkdir -p release_stage/chrome/public/extension
+          cp -r dist/* release_stage/chrome/public/extension/
+          node scripts/verify-build-artifacts.mjs \
+            --browser=chrome \
+            --expected-tag="${TAG}" \
+            --personal-dir=release_stage/chrome/personal/extension \
+            --public-dir=release_stage/chrome/public/extension
 
-      - name: Verify release build artifacts
-        run: node scripts/verify-build-artifacts.mjs --expected-tag="${TAG}" --personal-dir=release_stage/personal/extension --public-dir=release_stage/public/extension
-
-      - name: Package release archives
+      - name: Build and verify Firefox packages
         run: |
-          (cd release_stage/personal && zip -r "../../anime-korean-subtitle-${TAG}.zip" extension)
-          (cd release_stage/public && zip -r "../../anime-korean-subtitle-public-${TAG}.zip" extension)
-          git archive --format=zip --prefix="anime-korean-subtitle-${TAG#v}/" -o "anime-korean-subtitle-source-${TAG}.zip" HEAD
-          sha256sum "anime-korean-subtitle-${TAG}.zip" "anime-korean-subtitle-public-${TAG}.zip" "anime-korean-subtitle-source-${TAG}.zip" > "SHA256SUMS-${TAG}.txt"
+          npm run build:firefox:personal
+          mkdir -p release_stage/firefox/personal
+          cp -r dist/* release_stage/firefox/personal/
+          npm run build:firefox:public
+          mkdir -p release_stage/firefox/public
+          cp -r dist/* release_stage/firefox/public/
+          node scripts/verify-build-artifacts.mjs \
+            --browser=firefox \
+            --expected-tag="${TAG}" \
+            --personal-dir=release_stage/firefox/personal \
+            --public-dir=release_stage/firefox/public
+
+      - name: Package Chrome, Firefox, and source archives
+        run: |
+          mkdir -p release_out
+          (cd release_stage/chrome/personal && zip -r "../../../release_out/web-video-subtitle-chrome-${TAG}.zip" extension)
+          (cd release_stage/chrome/public && zip -r "../../../release_out/web-video-subtitle-chrome-public-${TAG}.zip" extension)
+          (cd release_stage/firefox/personal && zip -r "../../../release_out/web-video-subtitle-firefox-${TAG}.xpi" .)
+          (cd release_stage/firefox/public && zip -r "../../../release_out/web-video-subtitle-firefox-public-${TAG}.xpi" .)
+          git archive --format=zip --prefix="web-video-subtitle-${TAG#v}/" -o "release_out/web-video-subtitle-source-${TAG}.zip" HEAD
+
+      - name: Upload web release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-web-assets
+          path: release_out/*
+          retention-days: 1
+
+  build-ios:
+    runs-on: macos-latest
+    needs: build-web
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build-web.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and verify Safari extension profiles
+        env:
+          TAG: ${{ needs.build-web.outputs.tag }}
+        run: |
+          npm run build:safari:personal
+          mkdir -p safari_stage/personal
+          cp -r dist/* safari_stage/personal/
+          npm run build:safari:public
+          mkdir -p safari_stage/public
+          cp -r dist/* safari_stage/public/
+          node scripts/verify-build-artifacts.mjs \
+            --browser=safari \
+            --expected-tag="${TAG}" \
+            --personal-dir=safari_stage/personal \
+            --public-dir=safari_stage/public
+
+      - name: Build unsigned iOS IPAs (personal and public)
+        env:
+          TAG: ${{ needs.build-web.outputs.tag }}
+        run: |
+          mkdir -p release_out
+          for PROFILE in personal public; do
+            rm -rf dist ios-project ios-build ipa_stage
+            mkdir -p dist
+            cp -r "safari_stage/${PROFILE}/"* dist/
+            xcrun safari-web-extension-converter dist \
+              --project-location ios-project \
+              --app-name "WebVideoSubtitle" \
+              --bundle-identifier "io.github.puruuun.WebVideoSubtitle" \
+              --ios-only \
+              --no-open \
+              --no-prompt \
+              --force
+            find ios-project/WebVideoSubtitle -name "Info.plist" -not -path "*Tests*" -print0 | while IFS= read -r -d '' plist; do
+              /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$plist" 2>/dev/null || true
+              /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity:NSAllowsLocalNetworking" "$plist" 2>/dev/null || true
+              /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$plist"
+              /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$plist" 2>/dev/null || true
+              /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'Connect to a local LLM server on your local network for subtitle translation.'" "$plist"
+            done
+            XCODEPROJ=$(find ios-project -maxdepth 3 -name "*.xcodeproj" | head -n 1)
+            SCHEME=$(xcodebuild -list -json -project "$XCODEPROJ" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); const s=d.project.schemes; console.log(s.find(x=>x==='WebVideoSubtitle') || s.find(x=>!/extension/i.test(x)) || s[0]);")
+            xcodebuild \
+              -project "$XCODEPROJ" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -sdk iphoneos \
+              -destination 'generic/platform=iOS' \
+              CONFIGURATION_BUILD_DIR="$PWD/ios-build" \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              DEVELOPMENT_TEAM="" \
+              build
+            APP_PATH=$(find ios-build -maxdepth 2 -name "*.app" | head -n 1)
+            if [ -z "$APP_PATH" ]; then
+              echo "::error::Built .app bundle not found for profile ${PROFILE}"
+              exit 1
+            fi
+            mkdir -p ipa_stage/Payload
+            cp -R "$APP_PATH" ipa_stage/Payload/
+            if [ "$PROFILE" = "personal" ]; then
+              IPA_NAME="WebVideoSubtitle-ios-${TAG}-unsigned.ipa"
+            else
+              IPA_NAME="WebVideoSubtitle-ios-public-${TAG}-unsigned.ipa"
+            fi
+            (cd ipa_stage && zip -r "../release_out/${IPA_NAME}" Payload)
+          done
+
+      - name: Upload iOS release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-ios-assets
+          path: release_out/*.ipa
+          retention-days: 1
+
+  publish-release:
+    runs-on: ubuntu-latest
+    needs: [build-web, build-ios]
+    timeout-minutes: 10
+    steps:
+      - name: Download web release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: release-web-assets
+          path: release_assets
+
+      - name: Download iOS release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: release-ios-assets
+          path: release_assets
+
+      - name: Compute unified SHA-256 checksums
+        env:
+          TAG: ${{ needs.build-web.outputs.tag }}
+        run: |
+          cd release_assets
+          sha256sum \
+            "web-video-subtitle-chrome-${TAG}.zip" \
+            "web-video-subtitle-chrome-public-${TAG}.zip" \
+            "web-video-subtitle-firefox-${TAG}.xpi" \
+            "web-video-subtitle-firefox-public-${TAG}.xpi" \
+            "WebVideoSubtitle-ios-${TAG}-unsigned.ipa" \
+            "WebVideoSubtitle-ios-public-${TAG}-unsigned.ipa" \
+            "web-video-subtitle-source-${TAG}.zip" \
+            > "SHA256SUMS-${TAG}.txt"
 
       - name: Generate release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.build-web.outputs.tag }}
+          COMMIT_SHA: ${{ needs.build-web.outputs.sha }}
         run: |
           if ! gh api "repos/${{ github.repository }}/releases/generate-notes" \
             -f tag_name="${TAG}" \
@@ -88,21 +249,19 @@ jobs:
           cat << 'EOF' > release-notes-header.md
           ## ${TAG}
 
-          Miruro / Re:ANIME 회차 감지 및 외부 한국어 자막 연동 / 실시간 AI 번역 Chrome 확장프로그램의 정식 릴리스입니다.
+          Web Video Subtitle Extension 정식 릴리스입니다. (Desktop Chrome/Edge/Brave · Android Firefox/Chromium · iOS Safari Web Extension)
 
           ### 배포 패키지 안내
 
-          | 파일명 | 권한 프로필 | 설명 |
-          | :--- | :--- | :--- |
-          | `anime-korean-subtitle-${TAG}.zip` | 개인용 (`<all_urls>`) | 기본 권한 자동 허용, 재생 중 추가 권한 팝업 없음 (권장) |
-          | `anime-korean-subtitle-public-${TAG}.zip` | 공개용 (선언 호스트) | 최소 권한 원칙, 외부 호스트 초기 설정 시 수동 승인 |
-          | `anime-korean-subtitle-source-${TAG}.zip` | 소스 코드 | 태그 커밋 기준 전체 소스 코드 아카이브 |
-          | `SHA256SUMS-${TAG}.txt` | 체크섬 | SHA-256 무결성 검증 체크섬 파일 |
-
-          ### 설치 방법
-          1. 원하는 패키지(`anime-korean-subtitle-${TAG}.zip`)를 다운로드하여 압축을 해제합니다.
-          2. Chrome에서 `chrome://extensions` 접속 후 우측 상단 **개발자 모드**를 활성화합니다.
-          3. **압축해제된 확장 프로그램 로드**를 클릭하고 해제된 폴더 내의 `extension` 디렉토리를 선택합니다.
+          | 플랫폼 | 파일명 | 권한 프로필 | 설명 |
+          | :--- | :--- | :--- | :--- |
+          | **Chrome / Android Chromium** | `web-video-subtitle-chrome-${TAG}.zip` | 개인용 (`<all_urls>`) | 재생 중 추가 권한 요청 없음 (권장) |
+          | **Chrome / Android Chromium** | `web-video-subtitle-chrome-public-${TAG}.zip` | 공개용 (선언 호스트) | 최소 권한 원칙, 외부 호스트 수동 승인 |
+          | **Firefox (Desktop / Android)** | `web-video-subtitle-firefox-${TAG}.xpi` | 개인용 (`<all_urls>`) | Firefox Desktop / Nightly·Fennec Android용 |
+          | **Firefox (Desktop / Android)** | `web-video-subtitle-firefox-public-${TAG}.xpi` | 공개용 (선언 호스트) | 최소 권한 Firefox 패키지 |
+          | **iOS Safari** | `WebVideoSubtitle-ios-${TAG}-unsigned.ipa` | 개인용 (`<all_urls>`) | SideStore / AltStore / Sideloadly 설치용 (LAN 로컬 LLM 허용 포함) |
+          | **iOS Safari** | `WebVideoSubtitle-ios-public-${TAG}-unsigned.ipa` | 공개용 (선언 호스트) | 최소 권한 iOS Safari 패키지 |
+          | **Source & Checksums** | `web-video-subtitle-source-${TAG}.zip`, `SHA256SUMS-${TAG}.txt` | - | 태그 커밋 소스 코드 및 SHA-256 체크섬 |
 
           ---
 
@@ -116,34 +275,32 @@ jobs:
           ### 품질 검증 요약 (Quality Gate Summary)
           - TypeScript 정적 타입 검사 (`npm run typecheck`): 통과
           - 전체 단위 테스트 (`npm test`): 통과
-          - 개인용 및 공개용 듀얼 빌드 프로필 검증 완료
-          - Source commit SHA: `${GITHUB_SHA}`
+          - Chrome · Firefox · Safari 듀얼 권한 프로필 및 iOS Safari IPA 빌드 검증 완료
+          - Source commit SHA: `${COMMIT_SHA}`
           EOF
           sed -i "s/\${TAG}/${TAG}/g" release-notes-header.md
-          sed -i "s/\${GITHUB_SHA}/${GITHUB_SHA}/g" release-notes-footer.md
+          sed -i "s/\${COMMIT_SHA}/${COMMIT_SHA}/g" release-notes-footer.md
           cat release-notes-header.md generated-changelog.md release-notes-footer.md > release-notes.md
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.build-web.outputs.tag }}
+          COMMIT_SHA: ${{ needs.build-web.outputs.sha }}
         run: |
-          git config user.name "puruuun"
-          git config user.email "188972188+puruuun@users.noreply.github.com"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" \
-              "anime-korean-subtitle-${TAG}.zip" \
-              "anime-korean-subtitle-public-${TAG}.zip" \
-              "anime-korean-subtitle-source-${TAG}.zip" \
-              "SHA256SUMS-${TAG}.txt" \
-              --clobber
-            gh release edit "$TAG" --title "${TAG}" --notes-file release-notes.md --latest
+          ASSETS=(
+            "release_assets/web-video-subtitle-chrome-${TAG}.zip"
+            "release_assets/web-video-subtitle-chrome-public-${TAG}.zip"
+            "release_assets/web-video-subtitle-firefox-${TAG}.xpi"
+            "release_assets/web-video-subtitle-firefox-public-${TAG}.xpi"
+            "release_assets/WebVideoSubtitle-ios-${TAG}-unsigned.ipa"
+            "release_assets/WebVideoSubtitle-ios-public-${TAG}-unsigned.ipa"
+            "release_assets/web-video-subtitle-source-${TAG}.zip"
+            "release_assets/SHA256SUMS-${TAG}.txt"
+          )
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --repo "${{ github.repository }}" --clobber
+            gh release edit "$TAG" --repo "${{ github.repository }}" --title "${TAG}" --notes-file release-notes.md --latest
           else
-            gh release create "$TAG" \
-              "anime-korean-subtitle-${TAG}.zip" \
-              "anime-korean-subtitle-public-${TAG}.zip" \
-              "anime-korean-subtitle-source-${TAG}.zip" \
-              "SHA256SUMS-${TAG}.txt" \
-              --title "${TAG}" \
-              --notes-file release-notes.md \
-              --latest
+            gh release create "$TAG" "${ASSETS[@]}" --repo "${{ github.repository }}" --target "${COMMIT_SHA}" --title "${TAG}" --notes-file release-notes.md --latest
           fi
