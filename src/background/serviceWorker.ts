@@ -2,6 +2,7 @@ import { checkUpdates, updateConnection, saveUpdateToken } from './updates';
 import {
   startJob,
   cancelJob,
+  applyLocalSubtitle,
   trustedUI,
   currentStatus,
   contextChanged,
@@ -33,8 +34,14 @@ import {
   supportedTab,
 } from './frameManager';
 import { isWebVideoUrl } from '../sites/adapter';
+import { stableOriginPath, type AnimeContext } from '../anime/AnimeContext';
+import {
+  MAX_LOCAL_SUBTITLE_BYTES,
+  decodeBase64ToBytes,
+  parseLocalSubtitleBytes,
+} from '../subtitle/localSubtitle';
 import { createTranslationProvider } from '../translation/createTranslationProvider';
-import { errorText } from '../utils/errors';
+import { AppError, errorText } from '../utils/errors';
 import { safeSetAccessLevel } from '../platform/browser';
 const storageReady = Promise.all([
   safeSetAccessLevel(chrome.storage.local, 'TRUSTED_CONTEXTS'),
@@ -218,6 +225,41 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
       case 'ACTIVATE_GENERIC_TAB':
         await activateGenericTab(m.tabId);
         return { ok: true };
+      case 'LOAD_LOCAL_SUBTITLE': {
+        if (typeof m.fileName !== 'string' || typeof m.base64 !== 'string') {
+          throw new AppError('PARSE', '자막 파일 정보가 올바르지 않습니다.');
+        }
+        if (m.base64.length > Math.ceil((MAX_LOCAL_SUBTITLE_BYTES * 4) / 3) + 16) {
+          throw new AppError('SIZE', '자막 파일 크기는 최대 5MB까지 지원합니다.');
+        }
+        const bytes = decodeBase64ToBytes(m.base64);
+        const parsed = parseLocalSubtitleBytes(m.fileName, bytes);
+        const tab = await chrome.tabs.get(m.tabId);
+        if (!supportedSite(tab.url)) {
+          await activateGenericTab(m.tabId);
+        }
+        const tabUrl = tab.url ?? '';
+        let host = 'Web Video';
+        try {
+          host = new URL(tabUrl).hostname || host;
+        } catch {}
+        const fallbackContext: AnimeContext = {
+          site: 'generic',
+          animeId: stableOriginPath(tabUrl),
+          title: (tab.title || host).trim(),
+          episode: 1,
+          pageUrl: tabUrl,
+        };
+        const context = (m.context as AnimeContext | undefined) ?? fallbackContext;
+        return {
+          ok: true,
+          status: await applyLocalSubtitle(m.tabId, context, parsed.cues, {
+            fileName: m.fileName,
+            translate: m.translate === true,
+            sourceLanguage: typeof m.sourceLanguage === 'string' ? m.sourceLanguage : undefined,
+          }),
+        };
+      }
       case 'TOGGLE_GENERIC_AUTO_HOST': {
         const rawHost =
           typeof m.host === 'string' ? m.host : typeof m.hostname === 'string' ? m.hostname : '';
