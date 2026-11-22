@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { SubtitleRenderer, defaultDisplay, activeAt } from '../src/subtitle/SubtitleRenderer';
+import {
+  SubtitleRenderer,
+  defaultDisplay,
+  activeAt,
+  buildNativeTimelineCues,
+} from '../src/subtitle/SubtitleRenderer';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -99,8 +104,18 @@ describe('renderer lifecycle', () => {
     video.currentTime = 3;
     Object.defineProperty(document, 'fullscreenElement', { value: video, configurable: true });
     document.dispatchEvent(new Event('fullscreenchange'));
-    expect(native.addCue).toHaveBeenLastCalledWith(
+    expect(native.addCue).toHaveBeenCalledTimes(3);
+    expect(native.addCue).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ text: '한국어', startTime: 1, endTime: 2 }),
+    );
+    expect(native.addCue).toHaveBeenNthCalledWith(
+      2,
       expect.objectContaining({ text: '한국어\n日本語', startTime: 2, endTime: 4 }),
+    );
+    expect(native.addCue).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ text: '한국어', startTime: 4, endTime: 6 }),
     );
     expect(native.mode).toBe('showing');
     Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
@@ -364,5 +379,160 @@ describe('renderer lifecycle', () => {
     expect(styleSpy).toHaveBeenCalledWith('50px');
 
     renderer.destroy();
+  });
+
+  it('builds non-overlapping native timeline cues with offset clamping, maxLines, merging, and showJapanese toggle', () => {
+    const primary = [
+      { id: 1, startTime: 0.5, endTime: 2, text: '과거 자막' },
+      { id: 2, startTime: 3, endTime: 5, text: '첫째 줄\n둘째 줄\n셋째 줄' },
+      { id: 3, startTime: 5, endTime: 7, text: '같은 대사' },
+      { id: 4, startTime: 7, endTime: 9, text: '같은 대사' },
+    ];
+    const japanese = [
+      { id: 10, startTime: 4, endTime: 6, text: '日1\n日2\n日3' },
+      { id: 11, startTime: 1, endTime: 2, text: '消える' },
+    ];
+    const withJapanese = buildNativeTimelineCues(primary, japanese, {
+      offset: 2,
+      showJapanese: true,
+      japaneseOffset: 0,
+      maxLines: 2,
+    });
+    expect(withJapanese).toEqual([
+      { startTime: 1, endTime: 2, text: '첫째 줄\n둘째 줄' },
+      { startTime: 2, endTime: 3, text: '첫째 줄\n둘째 줄\n日1\n日2' },
+      { startTime: 3, endTime: 4, text: '같은 대사\n日1\n日2' },
+      { startTime: 4, endTime: 7, text: '같은 대사' },
+    ]);
+
+    const withoutJapanese = buildNativeTimelineCues(primary, japanese, {
+      offset: 1,
+      showJapanese: false,
+      japaneseOffset: 0,
+      maxLines: 3,
+    });
+    expect(withoutJapanese).toEqual([
+      { startTime: 0, endTime: 1, text: '과거 자막' },
+      { startTime: 2, endTime: 4, text: '첫째 줄\n둘째 줄\n셋째 줄' },
+      { startTime: 4, endTime: 8, text: '같은 대사' },
+    ]);
+  });
+
+  it('syncs native track for iOS webkitDisplayingFullscreen without per-frame churn and re-syncs on cue/offset/display changes', () => {
+    const { renderer, video } = fixture();
+    const host = document.querySelector('[data-animesub-overlay]') as HTMLElement;
+    const native = {
+      mode: 'disabled',
+      addCue: vi.fn(),
+      removeCue: vi.fn(),
+    } as unknown as TextTrack;
+    vi.spyOn(video, 'addTextTrack').mockReturnValue(native);
+    vi.stubGlobal(
+      'VTTCue',
+      class {
+        constructor(
+          public startTime: number,
+          public endTime: number,
+          public text: string,
+        ) {}
+      },
+    );
+
+    renderer.setCues([{ id: 1, startTime: 2, endTime: 5, text: '한국어' }]);
+    renderer.setJapaneseCues([{ id: 2, startTime: 3, endTime: 4, text: '日本語' }]);
+
+    Object.defineProperty(video, 'webkitDisplayingFullscreen', {
+      value: true,
+      configurable: true,
+    });
+    video.dispatchEvent(new Event('webkitbeginfullscreen'));
+
+    expect(renderer.isNativeVideoFullscreen()).toBe(true);
+    expect(host.style.visibility).toBe('hidden');
+    expect(native.mode).toBe('showing');
+    expect(native.addCue).toHaveBeenCalledTimes(1);
+    expect(native.addCue).toHaveBeenCalledWith(
+      expect.objectContaining({ startTime: 2, endTime: 5, text: '한국어' }),
+    );
+
+    // Repeated timeupdate ticks must not rebuild cues
+    video.currentTime = 2.5;
+    video.dispatchEvent(new Event('timeupdate'));
+    video.currentTime = 3.5;
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(native.addCue).toHaveBeenCalledTimes(1);
+
+    // Offset change re-syncs timeline
+    renderer.setOffset(1);
+    expect(native.removeCue).toHaveBeenCalledTimes(1);
+    expect(native.addCue).toHaveBeenCalledTimes(2);
+    expect(native.addCue).toHaveBeenLastCalledWith(
+      expect.objectContaining({ startTime: 1, endTime: 4, text: '한국어' }),
+    );
+
+    // Display showJapanese change re-syncs timeline
+    renderer.setDisplay({ ...defaultDisplay, showJapanese: true });
+    expect(native.addCue).toHaveBeenCalledTimes(5);
+
+    // New cues re-sync timeline
+    renderer.setCues([{ id: 3, startTime: 10, endTime: 12, text: '새 자막' }]);
+    expect(native.addCue).toHaveBeenLastCalledWith(
+      expect.objectContaining({ startTime: 9, endTime: 11, text: '새 자막' }),
+    );
+
+    // Exit fullscreen disables native track and restores DOM overlay
+    Object.defineProperty(video, 'webkitDisplayingFullscreen', {
+      value: false,
+      configurable: true,
+    });
+    video.dispatchEvent(new Event('webkitendfullscreen'));
+    expect(renderer.isNativeVideoFullscreen()).toBe(false);
+    expect(native.mode).toBe('disabled');
+    expect(host.style.visibility).toBe('visible');
+
+    renderer.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it('detects webkitPresentationMode fullscreen and cleans up WebKit listeners and native cues on destroy', () => {
+    const { renderer, video } = fixture();
+    const native = {
+      mode: 'disabled',
+      addCue: vi.fn(),
+      removeCue: vi.fn(),
+    } as unknown as TextTrack;
+    vi.spyOn(video, 'addTextTrack').mockReturnValue(native);
+    vi.stubGlobal(
+      'VTTCue',
+      class {
+        constructor(
+          public startTime: number,
+          public endTime: number,
+          public text: string,
+        ) {}
+      },
+    );
+
+    renderer.setCues([{ id: 1, startTime: 1, endTime: 4, text: '자막' }]);
+    Object.defineProperty(video, 'webkitPresentationMode', {
+      value: 'fullscreen',
+      configurable: true,
+    });
+    video.dispatchEvent(new Event('webkitpresentationmodechanged'));
+    expect(renderer.isNativeVideoFullscreen()).toBe(true);
+    expect(native.mode).toBe('showing');
+    expect(native.addCue).toHaveBeenCalledTimes(1);
+
+    const removeListenerSpy = vi.spyOn(video, 'removeEventListener');
+    renderer.destroy();
+    expect(native.mode).toBe('disabled');
+    expect(native.removeCue).toHaveBeenCalledTimes(1);
+    expect(removeListenerSpy).toHaveBeenCalledWith('webkitbeginfullscreen', expect.any(Function));
+    expect(removeListenerSpy).toHaveBeenCalledWith('webkitendfullscreen', expect.any(Function));
+    expect(removeListenerSpy).toHaveBeenCalledWith(
+      'webkitpresentationmodechanged',
+      expect.any(Function),
+    );
+    vi.unstubAllGlobals();
   });
 });

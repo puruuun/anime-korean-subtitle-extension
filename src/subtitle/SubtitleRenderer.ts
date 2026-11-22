@@ -45,6 +45,70 @@ export function activeAt(cues: SubtitleCue[], t: number): SubtitleCue[] {
   }
   return active;
 }
+export function buildNativeTimelineCues(
+  primary: SubtitleCue[],
+  japanese: SubtitleCue[],
+  opts: {
+    offset: number;
+    showJapanese: boolean;
+    japaneseOffset: number;
+    maxLines: number;
+  },
+): Array<{ startTime: number; endTime: number; text: string }> {
+  const shift = (cues: SubtitleCue[], delta: number) =>
+    cues.flatMap((c) => {
+      const startTime = Math.max(0, c.startTime - delta);
+      const endTime = c.endTime - delta;
+      return endTime > startTime && endTime > 0 ? [{ startTime, endTime, text: c.text }] : [];
+    });
+  const shiftedPrimary = shift(primary, opts.offset);
+  const shiftedJapanese = opts.showJapanese
+    ? shift(japanese, opts.offset + opts.japaneseOffset)
+    : [];
+  const boundaries = new Set<number>();
+  for (const c of shiftedPrimary) {
+    boundaries.add(c.startTime);
+    boundaries.add(c.endTime);
+  }
+  for (const c of shiftedJapanese) {
+    boundaries.add(c.startTime);
+    boundaries.add(c.endTime);
+  }
+  const sorted = [...boundaries].sort((a, b) => a - b);
+  const maxLines = Math.max(0, opts.maxLines);
+  const result: Array<{ startTime: number; endTime: number; text: string }> = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const t0 = sorted[i];
+    const t1 = sorted[i + 1];
+    if (t1 <= t0) continue;
+    const mid = (t0 + t1) / 2;
+    const primaryText = shiftedPrimary
+      .filter((c) => c.startTime <= mid && mid < c.endTime)
+      .map((c) => c.text)
+      .join('\n')
+      .split('\n')
+      .slice(0, maxLines)
+      .join('\n');
+    const japaneseText = opts.showJapanese
+      ? shiftedJapanese
+          .filter((c) => c.startTime <= mid && mid < c.endTime)
+          .map((c) => c.text)
+          .join('\n')
+          .split('\n')
+          .slice(0, maxLines)
+          .join('\n')
+      : '';
+    const text = [primaryText, japaneseText].filter(Boolean).join('\n');
+    if (!text) continue;
+    const prev = result[result.length - 1];
+    if (prev && prev.text === text && Math.abs(prev.endTime - t0) < 1e-6) {
+      prev.endTime = t1;
+    } else {
+      result.push({ startTime: t0, endTime: t1, text });
+    }
+  }
+  return result;
+}
 function timeLabel(seconds: number) {
   const total = Math.max(0, Math.floor(seconds));
   return (
@@ -102,6 +166,12 @@ export class SubtitleRenderer {
       'loadedmetadata',
     ])
       video.addEventListener(name, this.render);
+    for (const name of [
+      'webkitbeginfullscreen',
+      'webkitendfullscreen',
+      'webkitpresentationmodechanged',
+    ])
+      video.addEventListener(name, this.relocate);
     document.addEventListener('fullscreenchange', this.relocate);
     window.addEventListener('resize', this.render);
     window.addEventListener('scroll', this.render, true);
@@ -116,6 +186,7 @@ export class SubtitleRenderer {
     this.cues = [...this.cueStore.values()].sort(
       (a, b) => a.startTime - b.startTime || a.id - b.id,
     );
+    this.nativeRevision++;
     this.render();
   }
   setJapaneseCues(cues: SubtitleCue[]) {
@@ -123,6 +194,7 @@ export class SubtitleRenderer {
       .map((c) => ({ ...c }))
       .sort((a, b) => a.startTime - b.startTime || a.id - b.id);
     this.last = '';
+    this.nativeRevision++;
     this.render();
   }
   setImmediatePlayback(immediate: boolean) {
@@ -136,11 +208,20 @@ export class SubtitleRenderer {
     this.renderStatus();
   }
   setOffset(offset: number) {
-    this.offset = Math.max(-10, Math.min(10, offset));
+    const next = Math.max(-10, Math.min(10, offset));
+    if (next !== this.offset) this.nativeRevision++;
+    this.offset = next;
     this.render();
   }
   setDisplay(display: DisplaySettings) {
     display = { ...defaultDisplay, ...display };
+    if (
+      display.showJapanese !== this.display.showJapanese ||
+      display.japaneseOffset !== this.display.japaneseOffset ||
+      display.maxLines !== this.display.maxLines
+    ) {
+      this.nativeRevision++;
+    }
     this.display = display;
     this.line.style.fontSize = display.fontSize + 'px';
     this.line.style.bottom = display.bottom + '%';
@@ -223,33 +304,44 @@ export class SubtitleRenderer {
   };
   private native: TextTrack | undefined;
   private nativeCues: VTTCue[] = [];
-  private syncNative(active: SubtitleCue[], japanese: SubtitleCue[], text: string) {
+  private nativeRevision = 0;
+  private syncedNativeRevision = -1;
+  isNativeVideoFullscreen(): boolean {
+    const webkitVideo = this.video as HTMLVideoElement & {
+      webkitDisplayingFullscreen?: boolean;
+      webkitPresentationMode?: string;
+    };
+    return (
+      document.fullscreenElement === this.video ||
+      Boolean(webkitVideo.webkitDisplayingFullscreen) ||
+      webkitVideo.webkitPresentationMode === 'fullscreen'
+    );
+  }
+  private syncNativeTimeline(native: boolean) {
+    if (!native) {
+      if (this.native) this.native.mode = 'disabled';
+      this.syncedNativeRevision = -1;
+      return;
+    }
+    if (this.syncedNativeRevision === this.nativeRevision) return;
     if (!this.native) this.native = this.video.addTextTrack('subtitles', '한국어 · AnimeSub', 'ko');
     for (const c of this.nativeCues) this.native.removeCue(c);
-    const visible = [
-      ...active.map((c) => ({
-        ...c,
-        startTime: c.startTime - this.offset,
-        endTime: c.endTime - this.offset,
-      })),
-      ...japanese.map((c) => ({
-        ...c,
-        startTime: c.startTime - this.offset - this.display.japaneseOffset,
-        endTime: c.endTime - this.offset - this.display.japaneseOffset,
-      })),
-    ];
-    const start = Math.max(0, ...visible.map((c) => c.startTime));
-    this.nativeCues = text
-      ? [
-          new VTTCue(
-            start,
-            Math.max(start + 0.001, Math.min(...visible.map((c) => c.endTime))),
-            text,
-          ),
-        ]
-      : [];
-    this.nativeCues.forEach((c) => this.native!.addCue(c));
-    this.native.mode = text ? 'showing' : 'disabled';
+    this.nativeCues = [];
+    if (typeof VTTCue !== 'undefined') {
+      const segments = buildNativeTimelineCues(this.cues, this.japaneseCues, {
+        offset: this.offset,
+        showJapanese: this.display.showJapanese,
+        japaneseOffset: this.display.japaneseOffset,
+        maxLines: this.display.maxLines,
+      });
+      for (const seg of segments) {
+        const cue = new VTTCue(seg.startTime, seg.endTime, seg.text);
+        this.nativeCues.push(cue);
+        this.native.addCue(cue);
+      }
+    }
+    this.native.mode = this.nativeCues.length ? 'showing' : 'disabled';
+    this.syncedNativeRevision = this.nativeRevision;
   }
   private render = () => {
     if (this.disposed) return;
@@ -280,9 +372,9 @@ export class SubtitleRenderer {
       .split('\n')
       .slice(0, this.display.maxLines)
       .join('\n');
-    const native = document.fullscreenElement === this.video;
+    const native = this.isNativeVideoFullscreen();
     this.host.style.visibility = native || r.width === 0 ? 'hidden' : 'visible';
-    if (!native && this.native) this.native.mode = 'disabled';
+    this.syncNativeTimeline(native);
     // Include IDs and timing: equal dialogue text can occur in consecutive cues.
     const key =
       String(native) +
@@ -306,8 +398,6 @@ export class SubtitleRenderer {
         span.style.background = 'rgba(0,0,0,' + this.display.backgroundOpacity + ')';
         line.append(span);
       }
-      if (native)
-        this.syncNative(active, japanese, [text, japaneseText].filter(Boolean).join('\n'));
     }
   };
   destroy() {
@@ -324,6 +414,12 @@ export class SubtitleRenderer {
       'loadedmetadata',
     ])
       this.video.removeEventListener(n, this.render);
+    for (const n of [
+      'webkitbeginfullscreen',
+      'webkitendfullscreen',
+      'webkitpresentationmodechanged',
+    ])
+      this.video.removeEventListener(n, this.relocate);
     this.video.textTracks?.removeEventListener?.('addtrack', this.render);
     document.removeEventListener('fullscreenchange', this.relocate);
     window.removeEventListener('resize', this.render);
@@ -331,6 +427,7 @@ export class SubtitleRenderer {
     if (this.native) {
       this.native.mode = 'disabled';
       for (const c of this.nativeCues) this.native.removeCue(c);
+      this.nativeCues = [];
     }
     this.restoreTracks();
     this.originalTrackModes.clear();
