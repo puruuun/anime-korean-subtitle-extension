@@ -31,7 +31,11 @@ describe('install-time permission profiles', () => {
     expect(personal.version_name).toBeUndefined();
     expect(personal.background).toEqual({ scripts: ['serviceWorker.js'], type: 'module' });
     expect(personal.browser_specific_settings).toEqual({
-      gecko: { id: 'web-video-subtitle@puruuun.github.io', strict_min_version: '128.0' },
+      gecko: {
+        id: 'web-video-subtitle@puruuun.github.io',
+        strict_min_version: '128.0',
+        data_collection_permissions: { required: ['none'] },
+      },
       gecko_android: { strict_min_version: '128.0' },
     });
 

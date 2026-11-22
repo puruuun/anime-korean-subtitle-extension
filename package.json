@@ -14,6 +14,7 @@
     "test:browser:dual": "node scripts/browser-dual-subtitles.mjs",
     "test:browser:settings": "node scripts/browser-settings-updates.mjs",
     "test:browser:progressive": "node scripts/browser-progressive.mjs",
+    "test:browser:mobile": "node scripts/browser-mobile-viewport.mjs",
     "test:browser:anissia": "node scripts/browser-anissia-live.mjs",
     "test:anissia:distribution": "node scripts/verify-anissia-distribution.mjs",
     "test:browser:distribution": "node scripts/browser-anissia-distribution.mjs",

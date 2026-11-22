@@ -61,6 +61,8 @@ jobs:
           mkdir -p dist_archive/firefox/public
           cp -r dist/* dist_archive/firefox/public/
           node scripts/verify-build-artifacts.mjs --browser=firefox --personal-dir=dist_archive/firefox/personal --public-dir=dist_archive/firefox/public
+          npx --yes web-ext lint --source-dir dist_archive/firefox/personal
+          npx --yes web-ext lint --source-dir dist_archive/firefox/public
 
       - name: Build and verify Safari targets
         run: |
