@@ -6,6 +6,7 @@ import type { Mode } from '../../subtitle/SubtitleCore';
 import type { TranslationBufferStatus } from '../../translation/TranslationQueue';
 import { send } from '../api';
 import { workElapsedSeconds, workPending } from '../../background/jobClock';
+import { openExtensionManager } from '../../platform/browser';
 import '../style.css';
 const modes: { id: Mode; name: string; detail: string }[] = [
   { id: 'ko', name: '한국어 자막 검색', detail: '외부 한국어 자막을 그대로 적용' },
@@ -335,9 +336,9 @@ function Popup() {
         {missingOrigins.length > 0 && (
           <button
             className="text-button"
-            onClick={() =>
-              chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id })
-            }
+            onClick={() => {
+              void openExtensionManager();
+            }}
           >
             Chrome 권한 설정 열기
           </button>

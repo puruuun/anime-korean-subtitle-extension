@@ -27,7 +27,7 @@ async function assertFilesExist(dir) {
   }
 }
 
-async function verifyProfile(dir, expectedVersion, profile) {
+async function verifyProfile(dir, expectedVersion, profile, browser) {
   await assertFilesExist(dir);
   const manifest = await readJson(join(dir, 'manifest.json'));
   if (manifest.version !== expectedVersion) {
@@ -61,6 +61,30 @@ async function verifyProfile(dir, expectedVersion, profile) {
       throw new Error('[public] optional_host_permissions must include http/https wildcards');
     }
   }
+  if (browser === 'firefox') {
+    if (manifest.minimum_chrome_version !== undefined || manifest.version_name !== undefined) {
+      throw new Error(`[${profile}] firefox manifest must omit minimum_chrome_version and version_name`);
+    }
+    if (!Array.isArray(manifest.background?.scripts) || manifest.background.scripts.length === 0) {
+      throw new Error(`[${profile}] firefox manifest must define background.scripts`);
+    }
+    if (manifest.background?.service_worker !== undefined) {
+      throw new Error(`[${profile}] firefox manifest must omit background.service_worker`);
+    }
+    if (!manifest.browser_specific_settings?.gecko?.id) {
+      throw new Error(`[${profile}] firefox manifest must define browser_specific_settings.gecko.id`);
+    }
+  } else if (browser === 'safari') {
+    if (manifest.minimum_chrome_version !== undefined || manifest.version_name !== undefined) {
+      throw new Error(`[${profile}] safari manifest must omit minimum_chrome_version and version_name`);
+    }
+    if (
+      Array.isArray(manifest.content_scripts) &&
+      manifest.content_scripts.some((entry) => entry.match_origin_as_fallback !== undefined)
+    ) {
+      throw new Error(`[${profile}] safari manifest must omit match_origin_as_fallback`);
+    }
+  }
 }
 
 const pkg = await readJson('package.json');
@@ -82,10 +106,14 @@ if (process.argv.includes('--version-only')) {
   process.exit(0);
 }
 
+const browser = getArg('--browser=') ?? 'chrome';
+if (!['chrome', 'firefox', 'safari'].includes(browser)) {
+  throw new Error(`Unknown browser target: ${browser}`);
+}
 const personalDir = getArg('--personal-dir=') ?? 'dist/personal';
 const publicDir = getArg('--public-dir=') ?? 'dist/public';
 
-await verifyProfile(personalDir, pkg.version, 'personal');
-await verifyProfile(publicDir, pkg.version, 'public');
+await verifyProfile(personalDir, pkg.version, 'personal', browser);
+await verifyProfile(publicDir, pkg.version, 'public', browser);
 
-console.log(`Build artifacts and permission profiles verified for v${pkg.version}`);
+console.log(`Build artifacts and permission profiles verified for v${pkg.version} (${browser})`);

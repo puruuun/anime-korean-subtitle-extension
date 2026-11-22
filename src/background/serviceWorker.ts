@@ -26,9 +26,10 @@ import {
 } from './frameManager';
 import { createTranslationProvider } from '../translation/createTranslationProvider';
 import { errorText } from '../utils/errors';
+import { safeSetAccessLevel } from '../platform/browser';
 const storageReady = Promise.all([
-  chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }),
-  chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }),
+  safeSetAccessLevel(chrome.storage.local, 'TRUSTED_CONTEXTS'),
+  safeSetAccessLevel(chrome.storage.session, 'TRUSTED_CONTEXTS'),
 ]);
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   void (async () => {
