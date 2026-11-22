@@ -16,10 +16,12 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -37,8 +39,14 @@ jobs:
           fi
           echo "TAG=$TAG" >> "$GITHUB_ENV"
 
+      - name: Verify tag and version consistency
+        run: node scripts/verify-build-artifacts.mjs --version-only --expected-tag="${TAG}"
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Type check
         run: npm run typecheck
@@ -57,6 +65,9 @@ jobs:
           npm run build:public
           mkdir -p release_stage/public/extension
           cp -r dist/* release_stage/public/extension/
+
+      - name: Verify release build artifacts
+        run: node scripts/verify-build-artifacts.mjs --expected-tag="${TAG}" --personal-dir=release_stage/personal/extension --public-dir=release_stage/public/extension
 
       - name: Package release archives
         run: |
