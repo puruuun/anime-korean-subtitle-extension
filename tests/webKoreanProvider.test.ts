@@ -10,6 +10,9 @@ import {
   parseNaverSearchHtml,
   parseDuckDuckGoHtml,
   filterAndRankWebHits,
+  rankManualWebHits,
+  suggestWebSearchQuery,
+  buildManualWebCandidate,
   type WebSearchHit,
 } from '../src/providers/web/WebKoreanSubtitleProvider';
 import { AnissiaProvider } from '../src/providers/anissia/AnissiaProvider';
@@ -368,5 +371,171 @@ describe('SubtitlePipeline Anissia fallback to WebKoreanSubtitleProvider', () =>
 
     expect(statusCalls.some((s) => s.path === 'Web Search (KO)')).toBe(true);
     expect(statusCalls.some((s) => s.message === '웹 한국어 자막 사용 중')).toBe(true);
+  });
+});
+
+describe('Naver multi-anchor parsing and interactive manual web search', () => {
+  it('extracts real title, date, and snippet when Naver emits date/breadcrumb/thumbnail links before title', () => {
+    const html = `
+      <div class="main_pack">
+        <a href="https://ozuki1.blogspot.com/2026/10/1_02126025476.html">2026.10.05. 새 창 열림</a>
+        <a href="https://ozuki1.blogspot.com/2026/10/1_02126025476.html">ozuki1.blogspot.com › 1_02126025476 새 창 열림</a>
+        <a href="https://ozuki1.blogspot.com/2026/10/1_02126025476.html">새 창 열림</a>
+        <a href="https://ozuki1.blogspot.com/2026/10/1_02126025476.html">오즈키 애니 일기장: [자막] 푸른 상자 2기 1화 자막 새 창 열림</a>
+        <a href="https://ozuki1.blogspot.com/2026/10/1_02126025476.html">구글 드라이브 smi 자막 첨부 파일입니다. 새 창 열림</a>
+        <a href="https://blog.naver.com/songsong14">새 창 열림</a>
+        <a href="https://blog.naver.com/songsong14">블로그 홈 새 창 열림</a>
+      </div>
+    `;
+
+    const hits = parseNaverSearchHtml(html);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      title: '오즈키 애니 일기장: [자막] 푸른 상자 2기 1화 자막',
+      url: 'https://ozuki1.blogspot.com/2026/10/1_02126025476.html',
+      date: '2026.10.05',
+      source: 'naver',
+    });
+    expect(hits[0].snippet).toContain('구글 드라이브 smi 자막');
+  });
+
+  it('rejects review posts that explicitly refuse subtitle sharing and stale-year posts for season 2', () => {
+    const season2Context: AnimeContext = {
+      site: 'reanime',
+      title: 'Blue Box Season 2',
+      koreanTitle: '푸른 상자 2기',
+      episode: 1,
+      season: 2,
+      year: 2026,
+      pageUrl: 'https://reanime.cz/watch/blue-box-season-2?ep=1',
+    };
+
+    const hits: WebSearchHit[] = [
+      {
+        title: '2026년 4분기 review_ 푸른 상자 2기 1화',
+        url: 'https://blog.naver.com/reviewer/224433500877',
+        snippet: '참고사항 - 토렌트와 자막 질문은 받지 않겠습니다.',
+        date: '2026.10.06',
+        source: 'naver',
+      },
+      {
+        title: '푸른 상자 1화 자막',
+        url: 'https://old.blogspot.com/2024/10/ep1.html',
+        snippet: '2024년 방영 1화 자막 파일',
+        date: '2024.10.04',
+        source: 'naver',
+      },
+      {
+        title: '[자막] 푸른 상자 2기 1화 자막',
+        url: 'https://fresh.blogspot.com/2026/10/s2-ep1.html',
+        snippet: '2기 1화 한국어 자막 다운로드',
+        date: '2026.10.05',
+        source: 'naver',
+      },
+    ];
+
+    const ranked = filterAndRankWebHits(hits, season2Context, ['푸른 상자 2기', '푸른 상자']);
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0].pageUrl).toBe('https://fresh.blogspot.com/2026/10/s2-ep1.html');
+  });
+
+  it('ranks manual web hits prioritizing direct subtitle files and subtitle posts over reviews', () => {
+    const hits: WebSearchHit[] = [
+      {
+        title: '푸른 상자 2기 1화 리뷰',
+        url: 'https://blog.naver.com/reviewer/224433500877',
+        snippet: '자막 질문은 받지 않겠습니다.',
+        source: 'naver',
+      },
+      {
+        title: '푸른 상자 2기 1화 자막 다운로드',
+        url: 'https://subblog.tistory.com/123',
+        snippet: '한국어 smi 자막 첨부',
+        date: '2026.10.05',
+        source: 'naver',
+      },
+      {
+        title: 'bluebox_s2_01.srt',
+        url: 'https://files.example.org/subs/bluebox_s2_01.srt',
+        snippet: 'Direct subtitle file',
+        source: 'google',
+      },
+      {
+        title: 'Re:ANIME watch page',
+        url: 'https://reanime.cz/watch/blue-box-season-2',
+        snippet: '자막',
+        source: 'google',
+      },
+    ];
+
+    const ranked = rankManualWebHits(hits);
+    expect(ranked.map((r) => r.host)).toEqual([
+      'files.example.org',
+      'subblog.tistory.com',
+      'blog.naver.com',
+    ]);
+    expect(ranked[0].subtitleLikely).toBe(true);
+    expect(ranked[1].subtitleLikely).toBe(true);
+    expect(ranked[2].subtitleLikely).toBe(false);
+  });
+
+  it('suggests Korean query for anime and title query for generic sites, and builds manual candidates', async () => {
+    const koQuery = await suggestWebSearchQuery({
+      ...animeContext,
+      koreanTitle: '장송의 프리렌',
+      episode: 3,
+    });
+    expect(koQuery).toBe('장송의 프리렌 3화 자막');
+
+    const genericQuery = await suggestWebSearchQuery({
+      site: 'generic',
+      animeId: 'example.com/watch',
+      title: 'My Video Clip',
+      episode: 1,
+      pageUrl: 'https://example.com/watch',
+    });
+    expect(genericQuery).toBe('My Video Clip 자막');
+
+    const candidate = buildManualWebCandidate(
+      'https://subblog.tistory.com/123',
+      { ...animeContext, episode: 5 },
+      '프리렌 5화 자막',
+    );
+    expect(candidate).toMatchObject({
+      providerId: 'web-ko',
+      pageUrl: 'https://subblog.tistory.com/123',
+      episode: '5',
+      requireEpisodeMatch: false,
+    });
+  });
+
+  it('searchManual queries Naver with allowAnyPublicHost and returns ranked manual results', async () => {
+    const naverHtml = `
+      <div>
+        <a href="https://subs.example.org/bluebox-ep1.html">2026.10.05. 새 창 열림</a>
+        <a href="https://subs.example.org/bluebox-ep1.html">푸른 상자 2기 1화 한글 자막 배포 새 창 열림</a>
+        <a href="https://subs.example.org/bluebox-ep1.html">SRT/ASS 첨부 파일 다운로드 새 창 열림</a>
+      </div>
+    `;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('search.naver.com')) {
+          return new Response(naverHtml, { status: 200 });
+        }
+        return new Response('bot challenge', { status: 202 });
+      }),
+    );
+
+    const provider = new WebKoreanSubtitleProvider({ apiKey: '', cx: '' });
+    const results = await provider.searchManual('푸른 상자 2기 1화 자막');
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      title: '푸른 상자 2기 1화 한글 자막 배포',
+      url: 'https://subs.example.org/bluebox-ep1.html',
+      host: 'subs.example.org',
+      date: '2026.10.05',
+      subtitleLikely: true,
+    });
   });
 });

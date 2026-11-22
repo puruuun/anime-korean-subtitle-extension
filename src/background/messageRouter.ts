@@ -701,11 +701,20 @@ export function startJob(
 export function cancelJob(tabId: number, stopFollow = true) {
   return exclusive(tabId, () => cancelJobInternal(tabId, stopFollow));
 }
-export function applyLocalSubtitle(
+function applyDirectSubtitle(
   tabId: number,
   context: AnimeContext,
   cues: SubtitleCue[],
-  options: { fileName: string; translate?: boolean; sourceLanguage?: string },
+  options: {
+    source: 'local-file' | 'web-ko';
+    pathLabel: string;
+    readyMessage: string;
+    translatingMessage: string;
+    translatedMessage: string;
+    translate?: boolean;
+    sourceLanguage?: string;
+    allowSecondaryJapanese?: boolean;
+  },
 ): Promise<JobStatus> {
   return exclusive(tabId, async () => {
     const tab = await chrome.tabs.get(tabId);
@@ -734,7 +743,6 @@ export function applyLocalSubtitle(
     const epoch = await nextEpoch(tabId);
     await clearFrames(tabId, epoch);
     const translate = options.translate === true;
-    const pathLabel = 'Local File · ' + options.fileName;
     const j: Job = {
       controller: new AbortController(),
       cues: [],
@@ -754,11 +762,9 @@ export function applyLocalSubtitle(
         offset,
         updatedAt: Date.now(),
         stage: translate ? 'translate' : 'done',
-        message: translate
-          ? '로컬 자막 번역 준비 중 · ' + options.fileName
-          : '로컬 자막 적용 완료 · ' + options.fileName,
-        path: pathLabel,
-        source: 'local-file',
+        message: translate ? options.translatingMessage : options.readyMessage,
+        path: options.pathLabel,
+        source: options.source,
         episodeKey: episodeKey(context),
         startedAt: Date.now(),
         workElapsedMs: 0,
@@ -775,18 +781,19 @@ export function applyLocalSubtitle(
       await applyCues(tabId, cues, s.display, offset, epoch, s.targetLanguage);
       await publish(tabId, j, {
         stage: 'done',
-        message: '로컬 자막 적용 완료 · ' + options.fileName,
-        path: pathLabel,
-        source: 'local-file',
+        message: options.readyMessage,
+        path: options.pathLabel,
+        source: options.source,
       });
+      if (options.allowSecondaryJapanese) maybeEnsureJapanese(tabId, j);
       await persistRender(tabId, j);
       return uiStatus(j.status);
     }
     await publish(tabId, j, {
       stage: 'translate',
-      message: '로컬 자막 번역 준비 중 · ' + options.fileName,
-      path: pathLabel,
-      source: 'local-file',
+      message: options.translatingMessage,
+      path: options.pathLabel,
+      source: options.source,
     });
     await setBusy(tabId, true, epoch);
     void (async () => {
@@ -797,8 +804,8 @@ export function applyLocalSubtitle(
           s,
           (st) => {
             const patched =
-              st.source === 'local-file' && st.path
-                ? { ...st, path: st.path.replace(/^Web Search \(KO\)/, pathLabel) }
+              st.source === options.source && st.path
+                ? { ...st, path: st.path.replace(/^Web Search \(KO\)/, options.pathLabel) }
                 : st;
             void publish(tabId, j, patched);
             if (patched.translation?.chunks[0]?.state === 'failed') void releaseBootstrap(tabId, j);
@@ -810,7 +817,7 @@ export function applyLocalSubtitle(
         const translated = await core.run(context, 'auto', undefined, {
           cues,
           language: options.sourceLanguage || 'und',
-          source: 'local-file',
+          source: options.source,
         });
         j.controller.signal.throwIfAborted();
         if (!active(tabId, j)) return;
@@ -828,12 +835,13 @@ export function applyLocalSubtitle(
             ? '부분 번역 완료 · 실패한 ' +
               failures +
               '개 Chunk는 다시 적용하면 캐시부터 재시도합니다.'
-            : '로컬 자막 번역 및 적용 완료 · ' + options.fileName,
-          path: pathLabel,
-          source: 'local-file',
+            : options.translatedMessage,
+          path: options.pathLabel,
+          source: options.source,
           translation: j.queue?.snapshot(),
           results: [],
         });
+        if (options.allowSecondaryJapanese) maybeEnsureJapanese(tabId, j);
         await persistRender(tabId, j);
       } catch (e) {
         if (!active(tabId, j)) return;
@@ -845,6 +853,39 @@ export function applyLocalSubtitle(
       }
     })();
     return uiStatus(j.status);
+  });
+}
+export function applyLocalSubtitle(
+  tabId: number,
+  context: AnimeContext,
+  cues: SubtitleCue[],
+  options: { fileName: string; translate?: boolean; sourceLanguage?: string },
+): Promise<JobStatus> {
+  return applyDirectSubtitle(tabId, context, cues, {
+    source: 'local-file',
+    pathLabel: 'Local File · ' + options.fileName,
+    readyMessage: '로컬 자막 적용 완료 · ' + options.fileName,
+    translatingMessage: '로컬 자막 번역 준비 중 · ' + options.fileName,
+    translatedMessage: '로컬 자막 번역 및 적용 완료 · ' + options.fileName,
+    translate: options.translate,
+    sourceLanguage: options.sourceLanguage,
+  });
+}
+export function applyWebSubtitle(
+  tabId: number,
+  context: AnimeContext,
+  cues: SubtitleCue[],
+  options: { label: string; translate?: boolean; sourceLanguage?: string },
+): Promise<JobStatus> {
+  return applyDirectSubtitle(tabId, context, cues, {
+    source: 'web-ko',
+    pathLabel: 'Web Search · ' + options.label,
+    readyMessage: '웹 자막 적용 완료 · ' + options.label,
+    translatingMessage: '웹 자막 번역 준비 중 · ' + options.label,
+    translatedMessage: '웹 자막 번역 및 적용 완료 · ' + options.label,
+    translate: options.translate,
+    sourceLanguage: options.sourceLanguage,
+    allowSecondaryJapanese: context.site !== 'generic',
   });
 }
 export function ensureAutomaticJob(tabId: number) {

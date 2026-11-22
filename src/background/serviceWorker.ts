@@ -3,6 +3,7 @@ import {
   startJob,
   cancelJob,
   applyLocalSubtitle,
+  applyWebSubtitle,
   trustedUI,
   currentStatus,
   contextChanged,
@@ -40,6 +41,14 @@ import {
   decodeBase64ToBytes,
   parseLocalSubtitleBytes,
 } from '../subtitle/localSubtitle';
+import {
+  WebKoreanSubtitleProvider,
+  buildManualWebCandidate,
+  suggestWebSearchQuery,
+} from '../providers/web/WebKoreanSubtitleProvider';
+import { loadUsableSubtitle } from '../subtitle/loadUsableSubtitle';
+import { SubtitleLinkUnavailable } from '../subtitle/links/SubtitleLinkResolver';
+import { publicSubtitleURL } from './network';
 import { createTranslationProvider } from '../translation/createTranslationProvider';
 import { AppError, errorText } from '../utils/errors';
 import { safeSetAccessLevel } from '../platform/browser';
@@ -259,6 +268,100 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
             sourceLanguage: typeof m.sourceLanguage === 'string' ? m.sourceLanguage : undefined,
           }),
         };
+      }
+      case 'SUGGEST_WEB_QUERY': {
+        const context = m.context as AnimeContext | undefined;
+        if (!context || typeof context.title !== 'string') {
+          return { ok: true, query: '' };
+        }
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 5000);
+        try {
+          const query = await suggestWebSearchQuery(context, controller.signal);
+          return { ok: true, query };
+        } catch {
+          return { ok: true, query: context.title.trim() ? `${context.title.trim()} 자막` : '' };
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      case 'WEB_SUBTITLE_SEARCH': {
+        const rawQuery = typeof m.query === 'string' ? m.query.trim() : '';
+        if (!rawQuery) throw new AppError('QUERY', '검색어를 입력하세요.');
+        if (rawQuery.length > 200) throw new AppError('QUERY', '검색어는 200자 이하로 입력하세요.');
+        const s = await getSettings();
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 12000);
+        try {
+          const provider = new WebKoreanSubtitleProvider(s.googleSearch, controller.signal);
+          const results = await provider.searchManual(rawQuery, controller.signal, 12);
+          return { ok: true, query: rawQuery, results };
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      case 'APPLY_WEB_SUBTITLE': {
+        if (typeof m.url !== 'string' || !m.url.trim()) {
+          throw new AppError('URL', '자막 주소가 올바르지 않습니다.');
+        }
+        const cleanUrl = publicSubtitleURL(m.url, true);
+        const tab = await chrome.tabs.get(m.tabId);
+        if (!supportedSite(tab.url)) {
+          await activateGenericTab(m.tabId);
+        }
+        const tabUrl = tab.url ?? '';
+        let host = 'Web Video';
+        try {
+          host = new URL(tabUrl).hostname || host;
+        } catch {}
+        const fallbackContext: AnimeContext = {
+          site: 'generic',
+          animeId: stableOriginPath(tabUrl),
+          title: (tab.title || host).trim(),
+          episode: 1,
+          pageUrl: tabUrl,
+        };
+        const context = (m.context as AnimeContext | undefined) ?? fallbackContext;
+        const s = await getSettings();
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20000);
+        try {
+          const provider = new WebKoreanSubtitleProvider(s.googleSearch, controller.signal);
+          const candidate = buildManualWebCandidate(
+            cleanUrl,
+            context,
+            typeof m.title === 'string' ? m.title : undefined,
+          );
+          const usable = await loadUsableSubtitle(provider, candidate, context, controller.signal);
+          if (!usable.cues.length) {
+            return {
+              ok: true,
+              applied: false,
+              pageUrl: cleanUrl,
+              message: '자막 파일에서 유효한 대사를 찾지 못했습니다. 원본 페이지에서 확인하세요.',
+            };
+          }
+          const label = candidate.author || new URL(cleanUrl).hostname;
+          const status = await applyWebSubtitle(m.tabId, context, usable.cues, {
+            label,
+            translate: m.translate === true,
+            sourceLanguage: typeof m.sourceLanguage === 'string' ? m.sourceLanguage : undefined,
+          });
+          return { ok: true, applied: true, status };
+        } catch (err) {
+          if (err instanceof SubtitleLinkUnavailable) {
+            return {
+              ok: true,
+              applied: false,
+              pageUrl: err.resolution.pageUrl,
+              message: err.message,
+              requiredOrigins: err.resolution.requiredOrigins,
+            };
+          }
+          throw err;
+        } finally {
+          clearTimeout(timer);
+        }
       }
       case 'TOGGLE_GENERIC_AUTO_HOST': {
         const rawHost =

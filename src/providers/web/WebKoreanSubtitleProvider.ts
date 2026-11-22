@@ -17,44 +17,132 @@ export interface WebSearchHit {
   title: string;
   url: string;
   snippet: string;
+  date?: string;
   source: 'google' | 'naver' | 'duckduckgo';
 }
 
+export interface WebManualSearchResult {
+  id: string;
+  title: string;
+  url: string;
+  host: string;
+  snippet: string;
+  date?: string;
+  source: 'google' | 'naver' | 'duckduckgo';
+  subtitleLikely: boolean;
+}
+
 const EXCLUDED_DOMAINS =
-  /(?:^|\.)(?:namu\.wiki|wikipedia\.org|miruro\.to|reanime\.to|youtube\.com|kin\.naver\.com|cafe\.naver\.com|search\.naver\.com|duckduckgo\.com|google\.com)$/i;
+  /(?:^|\.)(?:namu\.wiki|wikipedia\.org|miruro\.to|reanime\.(?:to|cz)|youtube\.com|youtu\.be|kin\.naver\.com|cafe\.naver\.com|search\.naver\.com|nid\.naver\.com|help\.naver\.com|mkt\.naver\.com|shopping\.naver\.com|news\.naver\.com|comic\.naver\.com|series\.naver\.com|pstatic\.net|duckduckgo\.com|google\.com|google\.co\.kr|daum\.net|kakao\.com|instagram\.com|facebook\.com|x\.com|twitter\.com|tiktok\.com|netflix\.com|laftel\.net|watcha\.com|wavve\.com|tving\.com|coupang\.com|yes24\.com|aladin\.co\.kr|kyobobook\.co\.kr)$/i;
+
+const AUTO_SUBTITLE_HOST_REGEX =
+  /(?:^|\.)(?:tistory\.com|blogspot\.com|blog\.naver\.com|postype\.com|drive\.google\.com|github\.com|raw\.githubusercontent\.com)$/i;
+
+const DIRECT_SUBTITLE_PATH_REGEX = /\.(?:srt|ass|ssa|smi|sami|vtt|zip)(?:$|[?#])/i;
 
 const REVIEW_PATTERN =
-  /(?:리뷰|감상|줄거리|스포|명장면|해석|분석|오프닝|엔딩|가사|성우|더빙|피규어|굿즈)/i;
+  /(?:리뷰|\breview\b|감상|줄거리|스포|명장면|해석|분석|오프닝|엔딩|가사|성우|더빙|피규어|굿즈)/i;
 
-const SUBTITLE_INDICATOR_PATTERN = /(?:자막|smi|ass|srt|합본|첨부)/i;
-const SUBTITLE_KEYWORDS = /(?:자막|\.smi|\.ass|\.srt|\.zip|합본|통합본|전편|완결)/i;
+const ANTI_SUBTITLE_PATTERN =
+  /(?:자막\s*(?:질문|요청|공유|배포|파일).{0,16}(?:받지\s*않|하지\s*않|없습니다|안\s*합니다|불가))/i;
 
-export function parseNaverSearchHtml(html: string): WebSearchHit[] {
-  const hits: WebSearchHit[] = [];
-  const BLOG_HOST_REGEX = /(?:^|\.)(?:tistory\.com|blogspot\.com|blog\.naver\.com)$/i;
+const SUBTITLE_INDICATOR_PATTERN = /(?:자막|smi|ass|srt|vtt|합본|첨부|subtitle)/i;
+const SUBTITLE_KEYWORDS = /(?:자막|\.smi|\.ass|\.srt|\.vtt|\.zip|합본|통합본|전편|완결|subtitle)/i;
+
+const NAVER_DATE_REGEX = /^(\d{4}\.\d{2}\.\d{2})\.?$/;
+const NAVER_BREADCRUMB_REGEX = /^[\w.-]+\.(?:com|net|kr|org|io|me|jp|tv|cc|cz)(?:\s*[›>\/].*)?$/i;
+
+function cleanNaverAnchorText(raw: string): string {
+  return plainText(raw)
+    .replace(/\s*(?:새\s*창\s*열림|새로운\s*창으로\s*열림)\s*$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isBlogProfileRoot(parsed: URL): boolean {
+  const parts = parsed.pathname.split('/').filter(Boolean);
+  if (/(?:^|\.)blog\.naver\.com$/i.test(parsed.hostname)) {
+    return parts.length < 2 && !parsed.searchParams.get('logNo');
+  }
+  if (/(?:^|\.)(?:tistory\.com|blogspot\.com)$/i.test(parsed.hostname)) {
+    return parts.length === 0;
+  }
+  return false;
+}
+
+export function parseNaverSearchHtml(
+  html: string,
+  options: { allowAnyPublicHost?: boolean } = {},
+): WebSearchHit[] {
+  const allowAnyPublicHost = options.allowAnyPublicHost === true;
   const matches = html.matchAll(/<a\b((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/a\s*>/gi);
-  const seen = new Set<string>();
+  const grouped = new Map<
+    string,
+    { url: string; texts: string[]; date?: string; firstIndex: number }
+  >();
 
   for (const m of matches) {
     const href = attribute(m[1], 'href');
     if (!href) continue;
+    let parsed: URL;
+    let cleanUrl: string;
     try {
-      const parsed = new URL(href);
-      if (!BLOG_HOST_REGEX.test(parsed.hostname)) continue;
-      if (/^\/(?:search|tag|category|guestbook|manage|m|admin)(?:\/|$)/i.test(parsed.pathname))
-        continue;
-      if (seen.has(href)) continue;
-      seen.add(href);
-
-      const title = plainText(m[2]).trim();
-      if (!title || title.length < 2) continue;
-
-      const idx = html.indexOf(m[0]);
-      const snippet = plainText(html.slice(idx, idx + 400)).trim();
-      hits.push({ title, url: href, snippet, source: 'naver' });
+      cleanUrl = publicSubtitleURL(href, true);
+      parsed = new URL(cleanUrl);
     } catch {
-      /* ignore invalid URLs */
+      continue;
     }
+    if (EXCLUDED_DOMAINS.test(parsed.hostname)) continue;
+    if (
+      !allowAnyPublicHost &&
+      !AUTO_SUBTITLE_HOST_REGEX.test(parsed.hostname) &&
+      !DIRECT_SUBTITLE_PATH_REGEX.test(parsed.pathname)
+    ) {
+      continue;
+    }
+    if (/^\/(?:search|tag|category|guestbook|manage|m|admin)(?:\/|$)/i.test(parsed.pathname))
+      continue;
+    if (isBlogProfileRoot(parsed)) continue;
+
+    let entry = grouped.get(cleanUrl);
+    if (!entry) {
+      entry = { url: cleanUrl, texts: [], firstIndex: m.index ?? 0 };
+      grouped.set(cleanUrl, entry);
+    }
+
+    const cleaned = cleanNaverAnchorText(m[2]);
+    if (!cleaned) continue;
+
+    const dateMatch = cleaned.match(NAVER_DATE_REGEX);
+    if (dateMatch) {
+      entry.date ??= dateMatch[1];
+      continue;
+    }
+    if (NAVER_BREADCRUMB_REGEX.test(cleaned)) continue;
+    if (cleaned.length < 2) continue;
+    if (!entry.texts.includes(cleaned)) entry.texts.push(cleaned);
+  }
+
+  const hits: WebSearchHit[] = [];
+  for (const entry of grouped.values()) {
+    if (!entry.texts.length) continue;
+    // Naver cards emit the post title anchor before the body snippet anchor.
+    const titleIndex = entry.texts.findIndex(
+      (t) => t.length >= 3 && t.length <= 140 && !/^related posts?:?$/i.test(t),
+    );
+    const chosenIndex = titleIndex >= 0 ? titleIndex : 0;
+    const title = entry.texts[chosenIndex];
+    const extraTexts = entry.texts.filter((_t, i) => i !== chosenIndex);
+    const snippet = extraTexts.length
+      ? extraTexts.join(' ').slice(0, 400).trim()
+      : plainText(html.slice(entry.firstIndex, entry.firstIndex + 400)).trim();
+    hits.push({
+      title,
+      url: entry.url,
+      snippet,
+      ...(entry.date ? { date: entry.date } : {}),
+      source: 'naver',
+    });
   }
   return hits;
 }
@@ -148,6 +236,10 @@ export function filterAndRankWebHits(
       continue;
     }
 
+    if (ANTI_SUBTITLE_PATTERN.test(hit.title + ' ' + hit.snippet)) {
+      continue;
+    }
+
     if (!SUBTITLE_KEYWORDS.test(hit.title + ' ' + hit.snippet)) {
       continue;
     }
@@ -166,9 +258,17 @@ export function filterAndRankWebHits(
     if (!matchesTitle) continue;
 
     const seasonMatch = hit.title.match(/(?:제?\s*(\d+)\s*기|\bseason\s*(\d+)|\bs(\d{1,2})\b)/i);
+    const expectedSeason = enriched.season ?? 1;
+    let exactSeason = false;
     if (seasonMatch) {
       const hitSeason = Number(seasonMatch[1] ?? seasonMatch[2] ?? seasonMatch[3]);
-      if (hitSeason !== (enriched.season ?? 1)) continue;
+      if (hitSeason !== expectedSeason) continue;
+      exactSeason = true;
+    } else if (expectedSeason > 1 && enriched.year && hit.date) {
+      const hitYear = Number(hit.date.slice(0, 4));
+      if (Number.isFinite(hitYear) && hitYear > 0 && hitYear < enriched.year) {
+        continue;
+      }
     }
 
     const eps = [...postEpisodes(hit.title), ...rangeEpisodes(hit.title)];
@@ -187,6 +287,7 @@ export function filterAndRankWebHits(
     } else {
       rank += 5;
     }
+    if (exactSeason && expectedSeason > 1) rank += 25;
     if (hit.source === 'google') rank += 15;
     if (/(?:^|\.)(?:tistory\.com|blog\.naver\.com|blogspot\.com)$/i.test(parsed.hostname))
       rank += 20;
@@ -215,6 +316,118 @@ export function filterAndRankWebHits(
   }));
 }
 
+export function rankManualWebHits(hits: WebSearchHit[], limit = 12): WebManualSearchResult[] {
+  const seenUrls = new Set<string>();
+  const scored: { result: WebManualSearchResult; rank: number }[] = [];
+
+  for (const hit of hits) {
+    let cleanUrl: string;
+    let parsed: URL;
+    try {
+      cleanUrl = publicSubtitleURL(hit.url, true);
+      parsed = new URL(cleanUrl);
+    } catch {
+      continue;
+    }
+    if (seenUrls.has(cleanUrl)) continue;
+    seenUrls.add(cleanUrl);
+
+    if (EXCLUDED_DOMAINS.test(parsed.hostname)) continue;
+    if (isBlogProfileRoot(parsed)) continue;
+
+    const combined = `${hit.title} ${hit.snippet}`;
+    const hasAntiSubtitle = ANTI_SUBTITLE_PATTERN.test(combined);
+    const hasReviewOnly =
+      REVIEW_PATTERN.test(hit.title) && !SUBTITLE_INDICATOR_PATTERN.test(hit.title);
+    const directFile = DIRECT_SUBTITLE_PATH_REGEX.test(parsed.pathname);
+    const subtitleLikely =
+      !hasAntiSubtitle &&
+      (directFile ||
+        /(?:^|\.)drive\.google\.com$/i.test(parsed.hostname) ||
+        SUBTITLE_INDICATOR_PATTERN.test(hit.title) ||
+        (SUBTITLE_KEYWORDS.test(combined) && !hasReviewOnly));
+
+    let rank = 0;
+    if (directFile) rank += 60;
+    if (SUBTITLE_INDICATOR_PATTERN.test(hit.title)) rank += 45;
+    else if (SUBTITLE_KEYWORDS.test(combined)) rank += 20;
+    if (AUTO_SUBTITLE_HOST_REGEX.test(parsed.hostname)) rank += 20;
+    if (hit.source === 'google') rank += 15;
+    if (hasReviewOnly) rank -= 30;
+    if (hasAntiSubtitle) rank -= 50;
+
+    scored.push({
+      rank,
+      result: {
+        id: `web-manual:${scored.length}:${cleanUrl}`,
+        title: hit.title,
+        url: cleanUrl,
+        host: parsed.hostname,
+        snippet: hit.snippet.slice(0, 220),
+        ...(hit.date ? { date: hit.date } : {}),
+        source: hit.source,
+        subtitleLikely,
+      },
+    });
+  }
+
+  scored.sort((a, b) => b.rank - a.rank);
+  return scored.slice(0, limit).map((item) => item.result);
+}
+
+export async function suggestWebSearchQuery(
+  c: AnimeContext,
+  signal?: AbortSignal,
+  db: Pick<Database, 'get' | 'put'> = database,
+): Promise<string> {
+  if (c.site === 'generic') {
+    const base = c.title.trim();
+    return base ? `${base} 자막` : '';
+  }
+  const koTitles = await resolveKoreanTitles(c, signal, db);
+  const queryTitle = (koTitles[0] ?? c.title ?? '').trim();
+  if (!queryTitle) return '';
+  const epStr = c.episode > 0 ? normalizeEpisode(c.episode) ?? String(c.episode) : '';
+  return epStr ? `${queryTitle} ${epStr}화 자막` : `${queryTitle} 자막`;
+}
+
+export function buildManualWebCandidate(
+  url: string,
+  context: AnimeContext,
+  title?: string,
+): SubtitleSearchResult {
+  const cleanUrl = publicSubtitleURL(url, true);
+  const parsed = new URL(cleanUrl);
+  const ep =
+    context.site !== 'generic' && context.episode > 0
+      ? normalizeEpisode(context.episode) ?? String(context.episode)
+      : undefined;
+  const fileEpisodes = ep
+    ? [
+        ep,
+        ...(context.episodeOffset && context.episodeOffset > 0
+          ? [normalizeEpisode(context.episode + context.episodeOffset)!]
+          : []),
+      ]
+    : undefined;
+  return {
+    id: `web-manual:${cleanUrl}`,
+    providerId: 'web-ko',
+    title: context.title || title || parsed.hostname,
+    matchedTitle: context.title || title || parsed.hostname,
+    anilistId: context.anilistId,
+    season: context.season,
+    year: context.year,
+    episode: ep,
+    fileEpisodes,
+    requireEpisodeMatch: false,
+    language: 'ko',
+    author: parsed.hostname,
+    release: title?.trim() || parsed.hostname,
+    pageUrl: cleanUrl,
+  };
+}
+
 export class WebKoreanSubtitleProvider implements SubtitleProvider {
   id = 'web-ko';
 
@@ -225,6 +438,76 @@ export class WebKoreanSubtitleProvider implements SubtitleProvider {
     private cache = new SubtitleCache(),
     private db: Pick<Database, 'get' | 'put'> = database,
   ) {}
+
+  private async fetchWebHits(
+    q: string,
+    options: { allowAnyPublicHost?: boolean } = {},
+    signal = this.defaultSignal,
+  ): Promise<WebSearchHit[]> {
+    signal?.throwIfAborted();
+    const tasks: Promise<WebSearchHit[]>[] = [];
+
+    // 1. Google Custom Search JSON API
+    if (this.googleSearch.apiKey.trim() && this.googleSearch.cx.trim()) {
+      tasks.push(
+        (async () => {
+          const googleUrl = `https://customsearch.googleapis.com/customsearch/v1?key=${encodeURIComponent(
+            this.googleSearch.apiKey.trim(),
+          )}&cx=${encodeURIComponent(this.googleSearch.cx.trim())}&q=${encodeURIComponent(
+            q,
+          )}&num=10`;
+          const data = await requestJSON<{
+            items?: { title?: string; link?: string; snippet?: string }[];
+          }>(googleUrl, {}, 6000, signal);
+          const out: WebSearchHit[] = [];
+          for (const item of data.items ?? []) {
+            if (item.link && item.title) {
+              out.push({
+                title: item.title,
+                url: item.link,
+                snippet: item.snippet ?? '',
+                source: 'google',
+              });
+            }
+          }
+          return out;
+        })(),
+      );
+    }
+
+    // 2. Naver Search
+    tasks.push(
+      (async () => {
+        const naverUrl = `https://search.naver.com/search.naver?where=nexearch&query=${encodeURIComponent(
+          q,
+        )}`;
+        const bytes = await request(naverUrl, {}, 6000, signal);
+        const html = new TextDecoder().decode(bytes);
+        return parseNaverSearchHtml(html, options);
+      })(),
+    );
+
+    // 3. DuckDuckGo Search
+    tasks.push(
+      (async () => {
+        const ddgQuery = options.allowAnyPublicHost
+          ? q
+          : q + ' (site:tistory.com OR site:blogspot.com OR site:blog.naver.com)';
+        const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(ddgQuery)}`;
+        const bytes = await request(ddgUrl, {}, 6000, signal);
+        const html = new TextDecoder().decode(bytes);
+        return parseDuckDuckGoHtml(html);
+      })(),
+    );
+
+    const settled = await Promise.allSettled(tasks);
+    signal?.throwIfAborted();
+    const hits: WebSearchHit[] = [];
+    for (const res of settled) {
+      if (res.status === 'fulfilled') hits.push(...res.value);
+    }
+    return hits;
+  }
 
   async search(
     c: AnimeContext,
@@ -249,64 +532,22 @@ export class WebKoreanSubtitleProvider implements SubtitleProvider {
     const queries = [`${queryTitle} ${epStr}화 자막`, `${queryTitle} 자막 합본`];
 
     const hits: WebSearchHit[] = [];
-
     for (const q of queries) {
-      signal?.throwIfAborted();
-
-      // 1. Google Custom Search JSON API
-      if (this.googleSearch.apiKey.trim() && this.googleSearch.cx.trim()) {
-        try {
-          const googleUrl = `https://customsearch.googleapis.com/customsearch/v1?key=${encodeURIComponent(
-            this.googleSearch.apiKey.trim(),
-          )}&cx=${encodeURIComponent(this.googleSearch.cx.trim())}&q=${encodeURIComponent(
-            q,
-          )}&num=10`;
-          const data = await requestJSON<{
-            items?: { title?: string; link?: string; snippet?: string }[];
-          }>(googleUrl, {}, 6000, signal);
-          for (const item of data.items ?? []) {
-            if (item.link && item.title) {
-              hits.push({
-                title: item.title,
-                url: item.link,
-                snippet: item.snippet ?? '',
-                source: 'google',
-              });
-            }
-          }
-        } catch (e) {
-          if (signal?.aborted) throw signal.reason;
-        }
-      }
-
-      // 2. Naver Search
-      try {
-        signal?.throwIfAborted();
-        const naverUrl = `https://search.naver.com/search.naver?where=nexearch&query=${encodeURIComponent(
-          q,
-        )}`;
-        const bytes = await request(naverUrl, {}, 6000, signal);
-        const html = new TextDecoder().decode(bytes);
-        hits.push(...parseNaverSearchHtml(html));
-      } catch (e) {
-        if (signal?.aborted) throw signal.reason;
-      }
-
-      // 3. DuckDuckGo Search
-      try {
-        signal?.throwIfAborted();
-        const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(
-          q + ' (site:tistory.com OR site:blogspot.com OR site:blog.naver.com)',
-        )}`;
-        const bytes = await request(ddgUrl, {}, 6000, signal);
-        const html = new TextDecoder().decode(bytes);
-        hits.push(...parseDuckDuckGoHtml(html));
-      } catch (e) {
-        if (signal?.aborted) throw signal.reason;
-      }
+      hits.push(...(await this.fetchWebHits(q, { allowAnyPublicHost: false }, signal)));
     }
 
     return filterAndRankWebHits(hits, enriched, koTitles);
+  }
+
+  async searchManual(
+    query: string,
+    signal = this.defaultSignal,
+    limit = 12,
+  ): Promise<WebManualSearchResult[]> {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    const hits = await this.fetchWebHits(trimmed, { allowAnyPublicHost: true }, signal);
+    return rankManualWebHits(hits, limit);
   }
 
   async download(
