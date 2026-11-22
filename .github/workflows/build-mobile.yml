@@ -1,0 +1,151 @@
+name: Build Mobile Packages (Firefox & iOS Safari)
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Permission profile for iOS Safari IPA'
+        required: true
+        default: 'personal'
+        type: choice
+        options:
+          - personal
+          - public
+
+permissions:
+  contents: read
+
+jobs:
+  firefox-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Firefox personal and public targets
+        run: |
+          npm run build:firefox:personal
+          mkdir -p firefox_stage/personal
+          cp -r dist/* firefox_stage/personal/
+          npm run build:firefox:public
+          mkdir -p firefox_stage/public
+          cp -r dist/* firefox_stage/public/
+          node scripts/verify-build-artifacts.mjs \
+            --browser=firefox \
+            --personal-dir=firefox_stage/personal \
+            --public-dir=firefox_stage/public
+
+      - name: Package Firefox archives
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          mkdir -p mobile_out
+          (cd firefox_stage/personal && zip -r "../../mobile_out/web-video-subtitle-firefox-v${VERSION}.xpi" .)
+          (cd firefox_stage/public && zip -r "../../mobile_out/web-video-subtitle-firefox-public-v${VERSION}.xpi" .)
+
+      - name: Upload Firefox packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefox-extension-packages
+          path: mobile_out/*.xpi
+          retention-days: 14
+
+  ios-safari-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and verify Safari extension
+        env:
+          PROFILE: ${{ github.event.inputs.profile || 'personal' }}
+        run: |
+          npm run build:safari:personal
+          mkdir -p safari_stage/personal
+          cp -r dist/* safari_stage/personal/
+          npm run build:safari:public
+          mkdir -p safari_stage/public
+          cp -r dist/* safari_stage/public/
+          node scripts/verify-build-artifacts.mjs \
+            --browser=safari \
+            --personal-dir=safari_stage/personal \
+            --public-dir=safari_stage/public
+          rm -rf dist
+          mkdir -p dist
+          cp -r "safari_stage/${PROFILE}/"* dist/
+
+      - name: Convert to iOS Safari Web Extension Xcode project
+        run: |
+          xcrun safari-web-extension-converter dist \
+            --project-location ios-project \
+            --app-name "WebVideoSubtitle" \
+            --bundle-identifier "io.github.puruuun.webvideosubtitle" \
+            --ios-only \
+            --no-open \
+            --no-prompt \
+            --force
+
+      - name: Configure local network ATS for LAN Local LLM
+        run: |
+          find ios-project/WebVideoSubtitle -name "Info.plist" -not -path "*Tests*" -print0 | while IFS= read -r -d '' plist; do
+            /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$plist" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity:NSAllowsLocalNetworking" "$plist" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$plist"
+            /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$plist" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'Connect to a local LLM server on your local network for subtitle translation.'" "$plist"
+          done
+
+      - name: Build unsigned iOS IPA
+        env:
+          PROFILE: ${{ github.event.inputs.profile || 'personal' }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          XCODEPROJ=$(find ios-project -maxdepth 3 -name "*.xcodeproj" | head -n 1)
+          SCHEME=$(xcodebuild -list -json -project "$XCODEPROJ" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); const s=d.project.schemes; console.log(s.find(x=>x==='WebVideoSubtitle') || s.find(x=>!/extension/i.test(x)) || s[0]);")
+          echo "Using project: $XCODEPROJ | scheme: $SCHEME"
+          xcodebuild \
+            -project "$XCODEPROJ" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CONFIGURATION_BUILD_DIR="$PWD/ios-build" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+          APP_PATH=$(find ios-build -maxdepth 2 -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::Built .app bundle not found"
+            exit 1
+          fi
+          mkdir -p ipa_stage/Payload mobile_out
+          cp -R "$APP_PATH" ipa_stage/Payload/
+          (cd ipa_stage && zip -r "../mobile_out/WebVideoSubtitle-ios-${PROFILE}-v${VERSION}-unsigned.ipa" Payload)
+
+      - name: Upload unsigned iOS IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-safari-unsigned-ipa
+          path: mobile_out/*.ipa
+          retention-days: 14

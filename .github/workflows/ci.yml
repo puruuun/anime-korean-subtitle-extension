@@ -42,28 +42,48 @@ jobs:
       - name: Run unit tests
         run: npm test
 
-      - name: Build personal target
+      - name: Build and verify Chrome targets
         run: |
           npm run build:personal
-          mkdir -p dist_archive/personal
-          cp -r dist/* dist_archive/personal/
-
-      - name: Build public target
-        run: |
+          mkdir -p dist_archive/chrome/personal
+          cp -r dist/* dist_archive/chrome/personal/
           npm run build:public
-          mkdir -p dist_archive/public
-          cp -r dist/* dist_archive/public/
+          mkdir -p dist_archive/chrome/public
+          cp -r dist/* dist_archive/chrome/public/
+          node scripts/verify-build-artifacts.mjs --browser=chrome --personal-dir=dist_archive/chrome/personal --public-dir=dist_archive/chrome/public
+
+      - name: Build and verify Firefox targets
+        run: |
+          npm run build:firefox:personal
+          mkdir -p dist_archive/firefox/personal
+          cp -r dist/* dist_archive/firefox/personal/
+          npm run build:firefox:public
+          mkdir -p dist_archive/firefox/public
+          cp -r dist/* dist_archive/firefox/public/
+          node scripts/verify-build-artifacts.mjs --browser=firefox --personal-dir=dist_archive/firefox/personal --public-dir=dist_archive/firefox/public
+
+      - name: Build and verify Safari targets
+        run: |
+          npm run build:safari:personal
+          mkdir -p dist_archive/safari/personal
+          cp -r dist/* dist_archive/safari/personal/
+          npm run build:safari:public
+          mkdir -p dist_archive/safari/public
+          cp -r dist/* dist_archive/safari/public/
+          node scripts/verify-build-artifacts.mjs --browser=safari --personal-dir=dist_archive/safari/personal --public-dir=dist_archive/safari/public
+
+      - name: Stage build artifacts
+        run: |
           rm -rf dist
           mkdir -p dist
-          mv dist_archive/personal dist/personal
-          mv dist_archive/public dist/public
-
-      - name: Verify build artifacts and permission profiles
-        run: node scripts/verify-build-artifacts.mjs --personal-dir=dist/personal --public-dir=dist/public
+          mv dist_archive/chrome/personal dist/personal
+          mv dist_archive/chrome/public dist/public
+          mv dist_archive/firefox dist/firefox
+          mv dist_archive/safari dist/safari
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: anime-korean-subtitle-dist
+          name: web-video-subtitle-dist
           path: dist/
           retention-days: 7
