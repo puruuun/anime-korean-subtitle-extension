@@ -9,6 +9,7 @@ import {
   MAX_LOCAL_SUBTITLE_BYTES,
   encodeBytesToBase64,
 } from '../../subtitle/localSubtitle';
+import type { WebManualSearchResult } from '../../providers/web/WebKoreanSubtitleProvider';
 import type { TranslationBufferStatus } from '../../translation/TranslationQueue';
 import { requestHost, send } from '../api';
 import { workElapsedSeconds, workPending } from '../../background/jobClock';
@@ -128,6 +129,15 @@ function Popup() {
   const [autoHostEnabled, setAutoHostEnabled] = useState(false);
   const [togglingAutoHost, setTogglingAutoHost] = useState(false);
   const [localTranslate, setLocalTranslate] = useState(false);
+  const [webQuery, setWebQuery] = useState('');
+  const [webSearching, setWebSearching] = useState(false);
+  const [webSearched, setWebSearched] = useState(false);
+  const [webResults, setWebResults] = useState<WebManualSearchResult[]>([]);
+  const [webSearchError, setWebSearchError] = useState('');
+  const [webApplyingId, setWebApplyingId] = useState('');
+  const [webResultNotes, setWebResultNotes] = useState<Record<string, string>>({});
+  const [webTranslate, setWebTranslate] = useState(false);
+  const webQueryEdited = useRef(false);
   const localInputRef = useRef<HTMLInputElement>(null);
   const japanesePending = useRef(false);
   const japaneseRevision = useRef(0);
@@ -138,6 +148,13 @@ function Popup() {
     setTitle(c.title);
     setEpisode(String(c.episode));
     setSeason(c.season ? String(c.season) : '');
+    if (!webQueryEdited.current && c.title) {
+      void send<{ query: string }>({ type: 'SUGGEST_WEB_QUERY', context: c })
+        .then((r) => {
+          if (!webQueryEdited.current && r.query) setWebQuery(r.query);
+        })
+        .catch(() => {});
+    }
   }
   async function refresh(id: number, full = false, checkAccess = true) {
     const r = await send<{ status?: JobStatus }>({ type: 'GET_STATUS', tabId: id });
@@ -415,6 +432,183 @@ function Popup() {
       setWorking(false);
     }
   }
+  async function applyWebResult(target: { id: string; url: string; title?: string }) {
+    if (tabId === undefined) return;
+    setError('');
+    setWebSearchError('');
+    setWebApplyingId(target.id);
+    setWebResultNotes((prev) => {
+      const next = { ...prev };
+      delete next[target.id];
+      return next;
+    });
+    try {
+      let targetContext = context;
+      if (isGenericSite && genericUrl) {
+        await requestHost(genericUrl);
+        await send({ type: 'ACTIVATE_GENERIC_TAB', tabId });
+        setGenericActive(true);
+        const contextResult = await chrome.tabs
+          .sendMessage(tabId, { type: 'CONTEXT' }, { frameId: 0 })
+          .catch(() => null);
+        if (contextResult?.ok) {
+          targetContext = contextResult.context as AnimeContext;
+          acceptContext(targetContext);
+        }
+      }
+      if (!personal) {
+        await requestHost(target.url).catch(() => {});
+      }
+      const invoke = () =>
+        send<{
+          applied: boolean;
+          status?: JobStatus;
+          message?: string;
+          pageUrl?: string;
+          requiredOrigins?: string[];
+        }>({
+          type: 'APPLY_WEB_SUBTITLE',
+          tabId,
+          url: target.url,
+          title: target.title,
+          context: targetContext,
+          translate: webTranslate,
+        });
+      let res = await invoke();
+      if (!res.applied && res.requiredOrigins?.length) {
+        const originUrl = res.requiredOrigins[0].replace(/\*$/, '');
+        await requestHost(originUrl);
+        res = await invoke();
+      }
+      if (res.applied && res.status) {
+        setStatus(res.status);
+        await refresh(tabId, true, true);
+      } else {
+        const note =
+          res.message ||
+          '직접 자막 파일을 찾지 못했습니다. 원본 페이지에서 내려받아 로컬 자막으로 적용하세요.';
+        setWebResultNotes((prev) => ({ ...prev, [target.id]: note }));
+        if (target.id === 'direct-url') setWebSearchError(note);
+      }
+    } catch (err) {
+      const msg = (err as Error).message;
+      setWebResultNotes((prev) => ({ ...prev, [target.id]: msg }));
+      if (target.id === 'direct-url') setWebSearchError(msg);
+    } finally {
+      setWebApplyingId('');
+    }
+  }
+  async function searchWebSubtitles(event: React.FormEvent) {
+    event.preventDefault();
+    const trimmed = webQuery.trim();
+    if (!trimmed) {
+      setWebSearchError('검색어 또는 자막 페이지 주소를 입력하세요.');
+      return;
+    }
+    if (/^https?:\/\//i.test(trimmed)) {
+      await applyWebResult({ id: 'direct-url', url: trimmed, title: trimmed });
+      return;
+    }
+    setWebSearchError('');
+    setWebSearching(true);
+    setWebResultNotes({});
+    try {
+      if (!personal) {
+        await requestHost('https://search.naver.com/').catch(() => {});
+      }
+      const res = await send<{ results: WebManualSearchResult[] }>({
+        type: 'WEB_SUBTITLE_SEARCH',
+        query: trimmed,
+      });
+      setWebResults(res.results ?? []);
+      setWebSearched(true);
+    } catch (err) {
+      setWebSearchError((err as Error).message);
+    } finally {
+      setWebSearching(false);
+    }
+  }
+  const webSearchSection = (
+    <section className="web-search">
+      <p className="label-heading">웹에서 자막 직접 검색</p>
+      <form className="web-search-form" onSubmit={(e) => void searchWebSubtitles(e)}>
+        <input
+          type="search"
+          aria-label="웹 자막 검색어 또는 URL"
+          placeholder="예: 푸른 상자 2기 1화 자막 또는 URL"
+          value={webQuery}
+          disabled={webSearching || !!webApplyingId}
+          onChange={(e) => {
+            webQueryEdited.current = true;
+            setWebQuery(e.target.value);
+          }}
+        />
+        <button
+          type="submit"
+          className="secondary"
+          disabled={webSearching || !!webApplyingId || tabId === undefined}
+        >
+          {/^https?:\/\//i.test(webQuery.trim())
+            ? webApplyingId === 'direct-url'
+              ? '적용 중...'
+              : '바로 적용'
+            : webSearching
+              ? '검색 중...'
+              : '검색'}
+        </button>
+      </form>
+      <label className="check web-search-translate">
+        <input
+          type="checkbox"
+          checked={webTranslate}
+          disabled={busy || !!webApplyingId}
+          onChange={(e) => setWebTranslate(e.target.checked)}
+        />
+        찾은 자막을 목표 언어로 AI 번역
+      </label>
+      {webSearchError && <small className="error web-search-note">{webSearchError}</small>}
+      {webSearched && !webSearching && !webResults.length && !webSearchError && (
+        <small className="muted web-search-note">
+          검색 결과가 없습니다. 검색어를 짧게 바꾸거나 자막 블로그 URL을 직접 붙여넣어 보세요.
+        </small>
+      )}
+      {webResults.length > 0 && (
+        <div className="web-search-results" aria-label="웹 자막 검색 결과">
+          {webResults.slice(0, 8).map((item) => {
+            const applying = webApplyingId === item.id;
+            const note = webResultNotes[item.id];
+            return (
+              <div className="result web-search-item" key={item.id}>
+                <div className="web-search-item-head">
+                  <strong>{item.title}</strong>
+                  {item.subtitleLikely && <span className="web-search-tag">자막</span>}
+                </div>
+                <small className="web-search-meta">
+                  {item.host}
+                  {item.date ? ' · ' + item.date : ''}
+                </small>
+                {item.snippet && <p className="web-search-snippet">{item.snippet}</p>}
+                {note && <p className="error web-search-note">{note}</p>}
+                <div className="candidate-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy || !!webApplyingId}
+                    onClick={() => void applyWebResult(item)}
+                  >
+                    {applying ? '불러오는 중...' : '자막 적용'}
+                  </button>
+                  <a href={item.url} target="_blank" rel="noreferrer">
+                    원본 페이지 열기 ↗
+                  </a>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
   const localSubtitleSection = (
     <section className="local-subtitle">
       <p className="label-heading">로컬 자막 파일 불러오기</p>
@@ -585,6 +779,7 @@ function Popup() {
             />
             이 사이트에서 항상 자동 적용
           </label>
+          {webSearchSection}
           {localSubtitleSection}
           <section className="sync">
             <div className="row">
@@ -811,6 +1006,7 @@ function Popup() {
               </div>
             </div>
           ))}
+        {webSearchSection}
         {localSubtitleSection}
         <section className="sync">
           <div className="row">
