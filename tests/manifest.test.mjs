@@ -23,4 +23,47 @@ describe('install-time permission profiles', () => {
     }
     expect(m.optional_host_permissions).toEqual(['https://*/*', 'http://*/*']);
   });
+  it('builds firefox manifests with gecko settings and background scripts', () => {
+    const personal = buildManifest(base, 'personal', 'firefox');
+    expect(personal.host_permissions).toEqual(['<all_urls>']);
+    expect(personal.optional_host_permissions).toBeUndefined();
+    expect(personal.minimum_chrome_version).toBeUndefined();
+    expect(personal.version_name).toBeUndefined();
+    expect(personal.background).toEqual({ scripts: ['serviceWorker.js'], type: 'module' });
+    expect(personal.browser_specific_settings).toEqual({
+      gecko: { id: 'web-video-subtitle@puruuun.github.io', strict_min_version: '128.0' },
+      gecko_android: { strict_min_version: '128.0' },
+    });
+
+    const pub = buildManifest(base, 'public', 'firefox');
+    expect(pub.host_permissions).not.toContain('<all_urls>');
+    expect(pub.optional_host_permissions).toEqual(['https://*/*', 'http://*/*']);
+    expect(pub.background).toEqual({ scripts: ['serviceWorker.js'], type: 'module' });
+  });
+  it('builds safari manifests without chrome-only fields or match_origin_as_fallback', () => {
+    const personal = buildManifest(base, 'personal', 'safari');
+    expect(personal.host_permissions).toEqual(['<all_urls>']);
+    expect(personal.optional_host_permissions).toBeUndefined();
+    expect(personal.minimum_chrome_version).toBeUndefined();
+    expect(personal.version_name).toBeUndefined();
+    expect(personal.background).toEqual({ service_worker: 'serviceWorker.js', type: 'module' });
+    for (const script of personal.content_scripts) {
+      expect(script.match_origin_as_fallback).toBeUndefined();
+    }
+
+    const pub = buildManifest(base, 'public', 'safari');
+    expect(pub.host_permissions).not.toContain('<all_urls>');
+    expect(pub.optional_host_permissions).toEqual(['https://*/*', 'http://*/*']);
+    for (const script of pub.content_scripts) {
+      expect(script.match_origin_as_fallback).toBeUndefined();
+    }
+  });
+  it('throws on unknown target or browser', () => {
+    expect(() => buildManifest(base, 'unknown', 'chrome')).toThrow(
+      'Unknown extension build target: unknown',
+    );
+    expect(() => buildManifest(base, 'personal', 'edge')).toThrow(
+      'Unknown extension browser target: edge',
+    );
+  });
 });

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { defaultSettings, type Settings } from '../../storage/settings';
 import { send, requestHost } from '../api';
 import { ExtensionUpdates } from './ExtensionUpdates';
+import { openExtensionManager } from '../../platform/browser';
 import '../style.css';
 function SettingsPage() {
   const [s, setS] = useState<Settings>(structuredClone(defaultSettings));
@@ -109,9 +110,9 @@ function SettingsPage() {
         )}
         <button
           className="text-button"
-          onClick={() =>
-            chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id })
-          }
+          onClick={() => {
+            void openExtensionManager();
+          }}
         >
           Chrome 사이트 접근 설정
         </button>

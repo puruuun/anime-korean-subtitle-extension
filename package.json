@@ -17,7 +17,11 @@
     "test:anissia:distribution": "node scripts/verify-anissia-distribution.mjs",
     "test:browser:distribution": "node scripts/browser-anissia-distribution.mjs",
     "build:personal": "tsc --noEmit && node scripts/build.mjs --target=personal",
-    "build:public": "tsc --noEmit && node scripts/build.mjs --target=public"
+    "build:public": "tsc --noEmit && node scripts/build.mjs --target=public",
+    "build:firefox:personal": "tsc --noEmit && node scripts/build.mjs --target=personal --browser=firefox",
+    "build:firefox:public": "tsc --noEmit && node scripts/build.mjs --target=public --browser=firefox",
+    "build:safari:personal": "tsc --noEmit && node scripts/build.mjs --target=personal --browser=safari",
+    "build:safari:public": "tsc --noEmit && node scripts/build.mjs --target=public --browser=safari"
   },
   "dependencies": {
     "fflate": "^0.8.2",

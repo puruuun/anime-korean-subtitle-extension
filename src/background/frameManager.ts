@@ -2,6 +2,7 @@ import type { SubtitleSource } from '../sites/types';
 import type { SubtitleCue } from '../subtitle/SubtitleCue';
 import type { DisplaySettings } from '../subtitle/SubtitleRenderer';
 import { AppError } from '../utils/errors';
+import { sendTabMessageSafe } from '../platform/browser';
 export interface FrameInfo {
   frameId: number;
   url: string;
@@ -107,7 +108,7 @@ export async function applyCues(
     );
   const results = await Promise.allSettled(
     frames.map((f) =>
-      chrome.tabs.sendMessage(
+      sendTabMessageSafe(
         tabId,
         { type: 'APPLY', cues, display, offset, epoch },
         { frameId: f.frameId, ...(f.documentId ? { documentId: f.documentId } : {}) },
@@ -121,7 +122,7 @@ export async function sendVideoMessage(tabId: number, message: Record<string, un
   const frames = await videoFrames(tabId).catch(() => []);
   return Promise.allSettled(
     frames.map((f) =>
-      chrome.tabs.sendMessage(tabId, message, {
+      sendTabMessageSafe(tabId, message, {
         frameId: f.frameId,
         ...(f.documentId ? { documentId: f.documentId } : {}),
       }),
