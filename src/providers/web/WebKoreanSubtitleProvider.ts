@@ -33,7 +33,7 @@ export interface WebManualSearchResult {
 }
 
 const EXCLUDED_DOMAINS =
-  /(?:^|\.)(?:namu\.wiki|wikipedia\.org|miruro\.to|reanime\.(?:to|cz)|youtube\.com|youtu\.be|kin\.naver\.com|cafe\.naver\.com|search\.naver\.com|nid\.naver\.com|help\.naver\.com|mkt\.naver\.com|shopping\.naver\.com|news\.naver\.com|comic\.naver\.com|series\.naver\.com|pstatic\.net|duckduckgo\.com|google\.com|google\.co\.kr|daum\.net|kakao\.com|instagram\.com|facebook\.com|x\.com|twitter\.com|tiktok\.com|netflix\.com|laftel\.net|watcha\.com|wavve\.com|tving\.com|coupang\.com|yes24\.com|aladin\.co\.kr|kyobobook\.co\.kr)$/i;
+  /(?:^|\.)(?:namu\.wiki|wikipedia\.org|miruro\.(?:to|tv|online)|reanime\.(?:to|cz)|youtube\.com|youtu\.be|kin\.naver\.com|cafe\.naver\.com|search\.naver\.com|nid\.naver\.com|help\.naver\.com|mkt\.naver\.com|shopping\.naver\.com|news\.naver\.com|comic\.naver\.com|series\.naver\.com|pstatic\.net|duckduckgo\.com|google\.com|google\.co\.kr|daum\.net|kakao\.com|instagram\.com|facebook\.com|x\.com|twitter\.com|tiktok\.com|netflix\.com|laftel\.net|watcha\.com|wavve\.com|tving\.com|coupang\.com|yes24\.com|aladin\.co\.kr|kyobobook\.co\.kr)$/i;
 
 const AUTO_SUBTITLE_HOST_REGEX =
   /(?:^|\.)(?:tistory\.com|blogspot\.com|blog\.naver\.com|postype\.com|drive\.google\.com|github\.com|raw\.githubusercontent\.com)$/i;
