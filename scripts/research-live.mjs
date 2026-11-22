@@ -18,11 +18,15 @@ await context.route('**/*', (route) => {
   return route.continue();
 });
 try {
-  for (const initial of ['https://www.miruro.to/', 'https://reanime.to/watch/naruto-bjfend?ep=1']) {
+  for (const initial of [
+    'https://miruro.tv/',
+    'https://www.miruro.to/',
+    'https://reanime.to/watch/naruto-bjfend?ep=1',
+  ]) {
     const page = await context.newPage();
     try {
       await page.goto(initial, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      if (initial === 'https://www.miruro.to/') {
+      if (/^https:\/\/(?:www\.)?miruro\.(?:to|tv)\/$/i.test(initial)) {
         const link = page.locator('a[href^="/watch/"]').first();
         await link.waitFor({ timeout: 15000 });
         const href = await link.getAttribute('href');

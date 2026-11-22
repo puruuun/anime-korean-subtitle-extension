@@ -21,6 +21,12 @@ describe('install-time permission profiles', () => {
         expect(script.match_origin_as_fallback).toBe(true);
       }
     }
+    for (const host of ['https://*.miruro.tv/*', 'https://*.miruro.online/*']) {
+      expect(m.host_permissions).toContain(host);
+      for (const script of m.content_scripts) {
+        expect(script.matches).toContain(host);
+      }
+    }
     expect(m.optional_host_permissions).toEqual(['https://*/*', 'http://*/*']);
   });
   it('builds firefox manifests with gecko settings and background scripts', () => {

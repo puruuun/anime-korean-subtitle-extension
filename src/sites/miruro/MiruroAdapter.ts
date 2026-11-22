@@ -4,7 +4,7 @@ import { findVideo } from '../../content/videoDetector';
 import { detectMiruroSubtitles } from './subtitleDetector';
 export class MiruroAdapter implements SiteAdapter {
   matches(url: string) {
-    return /(^|\.)miruro\.to$/.test(new URL(url).hostname);
+    return /(^|\.)miruro\.(?:to|tv|online)$/i.test(new URL(url).hostname);
   }
   async getAnimeContext() {
     return miruroContext();
