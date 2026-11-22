@@ -26,7 +26,7 @@ export function getPermissionGuideCopy(
       showManagerButton: true,
       step1Title: '부가 기능을 활성화합니다.',
       step1Body:
-        '위 버튼(또는 주소창의 about:addons)에서 부가 기능 관리 화면을 엽니다. 목록에서 Anime Korean Subtitle을 선택해 사용 스위치를 켜세요. Firefox Android에서는 메뉴 → 확장 프로그램 → 확장 프로그램 관리에서 선택합니다.',
+        '위 버튼(또는 주소창의 about:addons)에서 부가 기능 관리 화면을 엽니다. 목록에서 Web Video Subtitle을 선택해 사용 스위치를 켜세요. Firefox Android에서는 메뉴 → 확장 프로그램 → 확장 프로그램 관리에서 선택합니다.',
       step2Title: '권한 탭에서 모든 사이트 데이터 액세스를 허용합니다.',
       step2Body:
         '세부정보의 권한 탭에서 모든 사이트의 데이터에 액세스(Firefox Android: 권한 → 모든 사이트 데이터 액세스 허용)를 켜세요. 사이트 접근이 제한되면 자동 자막이 시작되지 않습니다.',
@@ -70,7 +70,7 @@ export function getPermissionGuideCopy(
     showManagerButton: true,
     step1Title: '확장프로그램을 켭니다.',
     step1Body:
-      '위 링크를 누르면 이 확장프로그램의 세부정보가 열립니다. 사용 스위치를 켜세요. 목록 화면이 열렸다면 Anime Korean Subtitle 카드의 세부정보를 누릅니다.',
+      '위 링크를 누르면 이 확장프로그램의 세부정보가 열립니다. 사용 스위치를 켜세요. 목록 화면이 열렸다면 Web Video Subtitle 카드의 세부정보를 누릅니다.',
     step2Title: '사이트 액세스를 ‘모든 사이트에서’로 선택합니다.',
     step2Body:
       '세부정보의 사이트 액세스(또는 사이트 접근)에서 모든 사이트에서를 선택하세요. ‘선택 시’는 탭마다 확장을 눌러야 하므로 자동 자막이 시작되지 않습니다.',

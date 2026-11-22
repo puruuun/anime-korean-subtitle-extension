@@ -10,10 +10,10 @@ A cross-browser Manifest V3 extension that adds **external subtitle lookup, prog
 
 ## Key Features
 
-- **Automatic Subtitle Pipeline**: Detects the active title and episode, prioritizes external subtitles first, and falls back to AI translation only when needed.
-- **Progressive AI Translation**: Translates the first chunk quickly so playback starts right away while continuing in the background (prioritizing the current timestamp on seek).
-- **Dual Subtitles**: Optionally displays original Japanese subtitles underneath Korean subtitles with independent font size and timing offset controls.
-- **Sync Controls & Shortcuts**: Per-episode offset persistence and keyboard shortcuts right on the player.
+- **Multi-Language Target Subtitles**: Choose from 12 language presets (Korean, English, Japanese, Chinese, Spanish, French, German, etc.); prioritizes external subtitles first and falls back to AI translation only when needed.
+- **Universal Web Video + Specialized Sites**: Automatic detection on Miruro / Re:ANIME plus one-click activation (and per-site auto-apply) on any HTML5 `<video>` website.
+- **Local Subtitle Loader**: Load `.srt`, `.ass`, `.ssa`, `.smi`, or `.vtt` files directly on desktop or mobile, with optional progressive AI translation into your target language.
+- **Progressive AI Translation & Dual Subtitles**: Fast initial chunk playback with seek-prioritized background translation, dual-subtitle display, and full-timeline iOS Safari AVPlayer fullscreen captions.
 - **Local & Cloud Translation Engines**: Supports both Local LLM (LM Studio / OpenAI-compatible endpoints, including LAN servers) and Gemini API.
 
 ---
@@ -22,10 +22,12 @@ A cross-browser Manifest V3 extension that adds **external subtitle lookup, prog
 
 Download a build archive from [Releases](https://github.com/puruuun/web-video-subtitle-extension/releases):
 
-| Build Profile | Archive | Permission Scope | Best For |
+| Platform | Package (`v0.5.6`) | Permission Scope | Best For |
 | :--- | :--- | :--- | :--- |
-| **Personal (Recommended)** | `anime-korean-subtitle-v0.5.5.zip` | `<all_urls>` | Zero runtime permission prompts across subtitle hosts and local LLMs |
-| **Public** | `anime-korean-subtitle-public-v0.5.5.zip` | Declared hosts + optional opt-in | Least-privilege setup with explicit per-host approval |
+| **Chrome / Android Chromium** | `web-video-subtitle-chrome-v0.5.6.zip` | Personal (`<all_urls>`) | Zero runtime permission prompts *(Recommended)* |
+| **Chrome / Android Chromium** | `web-video-subtitle-chrome-public-v0.5.6.zip` | Public (declared hosts) | Least-privilege setup with explicit per-host approval |
+| **Firefox (Desktop / Android)** | `web-video-subtitle-firefox-v0.5.6.xpi` | Personal / Public | Firefox Desktop & Nightly/Fennec Android |
+| **iOS Safari** | `WebVideoSubtitle-ios-v0.5.6-unsigned.ipa` | Personal / Public | Sideload via SideStore / AltStore / Sideloadly and enable in Safari Settings |
 
 1. Extract the ZIP archive and locate the `extension/manifest.json` folder.
 2. Open `chrome://extensions` in Chrome and enable **Developer mode**.

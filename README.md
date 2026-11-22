@@ -10,22 +10,24 @@
 
 ## 주요 기능
 
-- **자동 자막 확보 파이프라인**: 작품·회차를 자동 감지해 외부 자막을 우선 적용하고, 없을 때만 AI 번역으로 폴백합니다.
-- **점진적 AI 번역**: 첫 구간을 빠르게 번역해 재생을 시작하고, 나머지는 재생 중 백그라운드에서 이어서 번역합니다(Seek 시 해당 구간 우선 처리).
-- **원문 동시 자막**: 한국어 자막 아래에 일본어 원문을 함께 표시하며, 글꼴 크기와 추가 싱크를 독립 조절할 수 있습니다.
-- **싱크 조절 & 단축키**: 회차별 싱크 자동 저장 및 플레이어 키보드 단축키 지원.
-- **로컬 / 클라우드 번역 엔진**: Local LLM(LM Studio / OpenAI 호환 API)과 Gemini API 모두 지원.
+- **다국어 목표 자막 & 자동 파이프라인**: 12개 언어 프리셋(한국어·영어·일본어·중국어 등) 중 원하는 언어로 자막을 표시하며, 외부 자막을 우선 적용하고 없을 때만 AI 번역으로 폴백합니다.
+- **범용 웹 비디오 + 전문 사이트 지원**: Miruro / Re:ANIME 자동 감지뿐 아니라 일반 HTML5 `<video>` 웹사이트에서도 팝업 원클릭(및 사이트별 자동 허용)으로 내장 자막을 번역·오버레이합니다.
+- **로컬 자막 파일 불러오기**: `.srt`, `.ass`, `.ssa`, `.smi`, `.vtt` 파일을 PC·모바일에서 직접 불러와 즉시 표시하거나 목표 언어로 AI 번역할 수 있습니다.
+- **점진적 AI 번역 & 원문 동시 자막**: 첫 구간을 빠르게 번역해 재생을 시작하고 백그라운드에서 이어서 번역(Seek 우선 처리)하며, 원문 동시 자막과 iOS Safari 전체화면 네이티브 타임라인을 지원합니다.
+- **로컬 / 클라우드 번역 엔진**: Local LLM(LM Studio / OpenAI 호환 API · LAN 서버 포함)과 Gemini API 모두 지원.
 
 ---
 
 ## 설치 방법
 
-[Releases](https://github.com/puruuun/web-video-subtitle-extension/releases)에서 환경에 맞는 빌드 ZIP을 내려받습니다.
+[Releases](https://github.com/puruuun/web-video-subtitle-extension/releases)에서 사용 환경에 맞는 패키지를 내려받습니다.
 
-| 빌드 | 파일명 | 권한 범위 | 추천 대상 |
+| 플랫폼 | 파일명 (`v0.5.6`) | 권한 프로필 | 추천 대상 |
 | :--- | :--- | :--- | :--- |
-| **개인용 (권장)** | `anime-korean-subtitle-v0.5.5.zip` | `<all_urls>` | 재생 중 추가 권한 요청 없이 바로 사용 |
-| **공개용** | `anime-korean-subtitle-public-v0.5.5.zip` | 선언 호스트 + 선택적 승인 | 최소 권한으로 필요한 도메인만 수동 승인 |
+| **Chrome / Android Chromium** | `web-video-subtitle-chrome-v0.5.6.zip` | 개인용 (`<all_urls>`) | 재생 중 추가 권한 요청 없이 바로 사용 *(권장)* |
+| **Chrome / Android Chromium** | `web-video-subtitle-chrome-public-v0.5.6.zip` | 공개용 (선언 호스트) | 최소 권한으로 필요한 도메인만 수동 승인 |
+| **Firefox (Desktop / Android)** | `web-video-subtitle-firefox-v0.5.6.xpi` | 개인용 / 공개용 | Firefox Desktop · Nightly/Fennec Android |
+| **iOS Safari** | `WebVideoSubtitle-ios-v0.5.6-unsigned.ipa` | 개인용 / 공개용 | SideStore / AltStore / Sideloadly로 설치 후 Safari 확장 활성화 |
 
 1. ZIP 압축을 해제하고 내부 `extension/manifest.json` 폴더를 확인합니다.
 2. Chrome에서 `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
