@@ -19,6 +19,7 @@ const harness = vi.hoisted(() => ({
   sent: [] as { tabId: number; message: Record<string, unknown> }[],
   apply: vi.fn(),
   clear: vi.fn(),
+  forgetTabFrames: vi.fn(),
   showJapanese: false,
   japanese: vi.fn(),
 }));
@@ -73,6 +74,7 @@ vi.mock('../src/background/frameManager', () => ({
   collectSubtitles: async () => [],
   videoFrames: async () => [{ frameId: 7, documentId: 'player-document' }],
   supportedSite: (url: string) => url.includes('miruro.to'),
+  forgetTabFrames: harness.forgetTabFrames,
   sendVideoMessage: async (tabId: number, message: Record<string, unknown>) => {
     harness.sent.push({ tabId, message: structuredClone(message) });
     return [];
@@ -112,6 +114,7 @@ const buffer = (firstComplete = false): TranslationBufferStatus => ({
 });
 let storage: Map<string, unknown>;
 let tabGet: ReturnType<typeof vi.fn>;
+let onRemovedListener: ((tabId: number) => void) | undefined;
 
 beforeEach(() => {
   vi.resetModules();
@@ -119,6 +122,8 @@ beforeEach(() => {
   harness.sent.length = 0;
   harness.apply.mockClear();
   harness.clear.mockClear();
+  harness.forgetTabFrames.mockClear();
+  onRemovedListener = undefined;
   harness.showJapanese = false;
   harness.japanese.mockReset().mockResolvedValue(undefined);
   storage = new Map();
@@ -131,7 +136,11 @@ beforeEach(() => {
       sendMessage: vi.fn(async (_tabId: number, message: { type: string }) =>
         message.type === 'PLAYBACK' ? { ok: true, currentTime: 201 } : { ok: true },
       ),
-      onRemoved: { addListener: vi.fn() },
+      onRemoved: {
+        addListener: vi.fn((listener: (tabId: number) => void) => {
+          onRemovedListener = listener;
+        }),
+      },
     },
     webNavigation: { getAllFrames: async () => [{ frameId: 7 }] },
     storage: {
@@ -504,5 +513,56 @@ describe('AUTO episode routing and recovery', () => {
     storage.set('job:9', { stage: 'error', busy: false });
     await router.ensureAutomaticJob(9);
     expect(harness.cores).toHaveLength(0);
+  });
+  it('cleans up japaneseController, autoEpisodes timers, frame state, and epoch on tab close', async () => {
+    harness.showJapanese = true;
+    const pendingJapanese: AbortSignal[] = [];
+    harness.japanese.mockImplementation(
+      (_c, _p, signal: AbortSignal) =>
+        new Promise(() => {
+          pendingJapanese.push(signal);
+        }),
+    );
+
+    const router = await import('../src/background/messageRouter');
+    await router.startJob(9, 'ko', context);
+    await vi.waitFor(() => expect(harness.cores).toHaveLength(1));
+    await harness.cores[0].progressive.onSource?.({ cues, language: 'ko', source: 'anissia' });
+    await vi.waitFor(() => expect(pendingJapanese).toHaveLength(1));
+    expect(storage.has('epoch:9')).toBe(true);
+
+    onRemovedListener?.(9);
+    await vi.waitFor(() => expect(storage.has('epoch:9')).toBe(false));
+    expect(pendingJapanese[0].aborted).toBe(true);
+    expect(harness.forgetTabFrames).toHaveBeenCalledWith(9);
+    expect(storage.has('job:9')).toBe(false);
+    expect(storage.has('render:9')).toBe(false);
+    expect(storage.has('follow:9')).toBe(false);
+    expect(storage.has('automatic:9')).toBe(false);
+    harness.cores[0].finish(cues);
+  });
+  it('clears pending autoEpisodes retry timer when a tab closes so it never fires afterward', async () => {
+    vi.useFakeTimers();
+    try {
+      const now = Date.now();
+      storage.set('automatic:9', {
+        key: 'miruro:router:1:1:tv',
+        context,
+        startedAt: now,
+        deadlineAt: now + 120000,
+        attempt: 1,
+        nextAt: now + 5000,
+      });
+      storage.set('job:9', { stage: 'searching', busy: true });
+      const router = await import('../src/background/messageRouter');
+      await router.ensureAutomaticJob(9);
+      expect(harness.cores).toHaveLength(0);
+
+      onRemovedListener?.(9);
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(harness.cores).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

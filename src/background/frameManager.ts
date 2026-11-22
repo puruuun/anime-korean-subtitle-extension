@@ -89,7 +89,7 @@ export async function collectSubtitles(tabId: number): Promise<SubtitleSource[]>
   );
   const sources: SubtitleSource[] = [];
   for (const r of results)
-    if (r.status === 'fulfilled' && Array.isArray(r.value.sources))
+    if (r.status === 'fulfilled' && Array.isArray(r.value?.sources))
       sources.push(...r.value.sources);
   return sources;
 }
@@ -165,4 +165,7 @@ export async function injectFrames(tabId: number) {
 chrome.webNavigation.onCommitted.addListener((d) => {
   if (d.frameId !== 0) void injectFrame(d.tabId, d.frameId);
 });
-chrome.tabs.onRemoved.addListener((id) => available.delete(id));
+export function forgetTabFrames(tabId: number): void {
+  available.delete(tabId);
+}
+chrome.tabs.onRemoved.addListener((id) => forgetTabFrames(id));

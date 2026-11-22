@@ -161,7 +161,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
         ].flatMap((url) => {
           try {
             const u = new URL(url ?? '');
-            return /^https?:$/.test(u.protocol) ? [u.origin + '/*'] : [];
+            return /^https?:$/.test(u.protocol) ? [u.origin.replace(/:\d+$/, '') + '/*'] : [];
           } catch {
             return [];
           }
