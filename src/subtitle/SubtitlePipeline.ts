@@ -95,13 +95,14 @@ export class SubtitlePipeline {
 
     if (!provider && !webProvider) return undefined;
 
-    const deadlineMs = manual ? 30000 : webProvider ? 15000 : 10000;
+    const anissiaDeadlineMs = manual ? 25000 : 15000;
+    const webDeadlineMs = manual ? 15000 : 10000;
     let candidates: SubtitleSearchResult[] = [];
     let resolved = false;
 
     try {
-      return await withDeadline(this.signal, deadlineMs, async (signal) => {
-        if (selected) {
+      if (selected) {
+        return await withDeadline(this.signal, anissiaDeadlineMs, async (signal) => {
           const targetProvider =
             selected.providerId === 'web-ko' && webProvider
               ? webProvider
@@ -126,9 +127,11 @@ export class SubtitlePipeline {
             source: selected.providerId,
           });
           return { cues: usable.cues, language: 'ko', source: selected.providerId };
-        }
+        });
+      }
 
-        if (provider) {
+      if (provider) {
+        const anissiaResult = await withDeadline(this.signal, anissiaDeadlineMs, async (signal) => {
           this.status({
             stage: 'search',
             message: 'Anissia 한국어 자막을 찾는 중...',
@@ -175,9 +178,18 @@ export class SubtitlePipeline {
             log('Anissia', { unavailable: error instanceof Error ? error.message : 'unknown' });
             if (!webProvider && manual && !candidates.length) throw error;
           }
-        }
+          return undefined;
+        }).catch((error) => {
+          this.signal.throwIfAborted();
+          log('Anissia', { unavailable: error instanceof Error ? error.message : 'unknown' });
+          if (!webProvider && manual && !candidates.length) throw error;
+          return undefined;
+        });
+        if (anissiaResult) return anissiaResult;
+      }
 
-        if (webProvider) {
+      if (webProvider) {
+        return await withDeadline(this.signal, webDeadlineMs, async (signal) => {
           signal.throwIfAborted();
           this.status({
             stage: 'search',
@@ -225,10 +237,11 @@ export class SubtitlePipeline {
             log('WebKorean', { unavailable: error instanceof Error ? error.message : 'unknown' });
             if (manual && !candidates.length) throw error;
           }
-        }
+          return undefined;
+        });
+      }
 
-        return undefined;
-      });
+      return undefined;
     } catch (error) {
       this.signal.throwIfAborted();
       log('KoreanPipeline', { unavailable: error instanceof Error ? error.message : 'unknown' });

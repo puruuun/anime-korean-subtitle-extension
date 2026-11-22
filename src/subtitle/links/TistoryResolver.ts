@@ -54,6 +54,51 @@ function isSameSeries(title1: string, title2: string): boolean {
   return Boolean(c1 && c2 && (c1 === c2 || c1.includes(c2) || c2.includes(c1)));
 }
 
+function collectTistoryPosts(
+  html: string,
+  origin: string,
+  hostname: string,
+  postMap: Map<string, TistoryPostEntry>,
+) {
+  for (const l of htmlLinks(html, origin)) {
+    try {
+      const u = new URL(l.url);
+      if (u.hostname !== hostname) continue;
+      if (
+        /^\/(?:search|tag|category|guestbook|manage|m|admin|toolbar|notice|attachment|dn|archive)(?:\/|$)/i.test(
+          u.pathname,
+        )
+      )
+        continue;
+      if (u.pathname === '/' || !u.pathname) continue;
+      const cleanUrl = u.origin + u.pathname;
+      const titleText = l.label
+        .replace(/\s*\d{4}[.\-/]\d{2}[.\-/]\d{2}(?:\s+\d{2}:\d{2})?\s*$/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!titleText || titleText.length < 2) continue;
+      const existing = postMap.get(cleanUrl);
+      if (!existing) {
+        postMap.set(cleanUrl, { title: titleText, url: cleanUrl });
+      } else {
+        // Prefer concise post titles over long search-card body excerpts.
+        const existingConcise = existing.title.length <= 120;
+        const nextConcise = titleText.length <= 120;
+        if (
+          (!existingConcise && nextConcise) ||
+          (existingConcise === nextConcise &&
+            postEpisodes(titleText).length > 0 &&
+            postEpisodes(existing.title).length === 0)
+        ) {
+          postMap.set(cleanUrl, { title: titleText, url: cleanUrl });
+        }
+      }
+    } catch {
+      /* ignore invalid URLs */
+    }
+  }
+}
+
 export class TistoryResolver implements SubtitleLinkResolver {
   id = 'tistory';
 
@@ -87,7 +132,7 @@ export class TistoryResolver implements SubtitleLinkResolver {
     }
     if (!series) return original;
 
-    const cacheKey = JSON.stringify(['tistory:series:v1', url.origin, series]);
+    const cacheKey = JSON.stringify(['tistory:series:v2', url.origin, series]);
     const cached = await database
       .get<{ expiresAt: number; entries: TistoryPostEntry[] }>(cacheKey)
       .catch(() => undefined);
@@ -96,65 +141,91 @@ export class TistoryResolver implements SubtitleLinkResolver {
     let entries = cached && cached.expiresAt > Date.now() ? cached.entries : undefined;
 
     if (!entries) {
-      entries = [];
+      const postMap = new Map<string, TistoryPostEntry>();
+      collectTistoryPosts(html, url.origin, url.hostname, postMap);
       const searchUrl = `${url.origin}/search/${encodeURIComponent(series)}`;
       try {
         const searchResource = await context.load(searchUrl, context.signal);
         const searchHtml = new TextDecoder().decode(searchResource.bytes);
-        const links = htmlLinks(searchHtml, url.origin);
-        const postMap = new Map<string, TistoryPostEntry>();
-
-        for (const l of links) {
-          try {
-            const u = new URL(l.url);
-            if (u.hostname !== url.hostname) continue;
-            if (
-              /^\/(?:search|tag|category|guestbook|manage|m|admin|toolbar|notice|attachment|dn)(?:\/|$)/i.test(
-                u.pathname,
-              )
-            )
-              continue;
-            if (u.pathname === '/' || !u.pathname) continue;
-            const cleanUrl = u.origin + u.pathname;
-            const titleText = l.label.trim();
-            if (!titleText) continue;
-            const existing = postMap.get(cleanUrl);
-            if (!existing || titleText.length > existing.title.length) {
-              postMap.set(cleanUrl, { title: titleText, url: cleanUrl });
-            }
-          } catch {
-            /* ignore invalid URLs */
-          }
-        }
-        entries = Array.from(postMap.values());
-        context.signal?.throwIfAborted();
-        await database.put(cacheKey, { expiresAt: Date.now() + TTL, entries }).catch(() => {});
+        collectTistoryPosts(searchHtml, url.origin, url.hostname, postMap);
       } catch (err) {
         context.signal?.throwIfAborted();
         if (err instanceof SubtitleHostPermission) throw err;
       }
+      entries = Array.from(postMap.values());
+      context.signal?.throwIfAborted();
+      await database.put(cacheKey, { expiresAt: Date.now() + TTL, entries }).catch(() => {});
     }
 
     const allowed = context.candidate.fileEpisodes ?? [normalizeEpisode(context.candidate.episode)];
-    const matching = entries.filter((entry) => {
-      try {
-        if (new URL(entry.url).pathname === url.pathname) return false;
-      } catch {
-        return false;
+    const filterMatching = (list: TistoryPostEntry[]) =>
+      list.filter((entry) => {
+        try {
+          if (new URL(entry.url).pathname === url.pathname) return false;
+        } catch {
+          return false;
+        }
+        if (!isSameSeries(entry.title, series)) return false;
+        const eps = postEpisodes(entry.title);
+        const hasEpisode = eps.some((ep) => allowed.includes(ep));
+        const hasBatch = BATCH_KEYWORD.test(entry.title);
+        return hasEpisode || hasBatch;
+      });
+
+    let matching = filterMatching(entries);
+
+    if (!matching.length) {
+      const categoryLinks = htmlLinks(html, url.origin)
+        .filter((l) => {
+          try {
+            const u = new URL(l.url);
+            return (
+              u.hostname === url.hostname &&
+              /^\/category\/.+/i.test(u.pathname) &&
+              isSameSeries(decodeURIComponent(u.pathname.replace(/^\/category\//i, '')), series)
+            );
+          } catch {
+            return false;
+          }
+        })
+        .slice(0, 2);
+      if (categoryLinks.length) {
+        const postMap = new Map<string, TistoryPostEntry>(entries.map((e) => [e.url, e]));
+        for (const cat of categoryLinks) {
+          context.signal?.throwIfAborted();
+          try {
+            const catRes = await context.load(cat.url, context.signal);
+            const catHtml = new TextDecoder().decode(catRes.bytes);
+            collectTistoryPosts(catHtml, url.origin, url.hostname, postMap);
+          } catch (err) {
+            context.signal?.throwIfAborted();
+            if (err instanceof SubtitleHostPermission) throw err;
+          }
+        }
+        entries = Array.from(postMap.values());
+        matching = filterMatching(entries);
       }
-      if (!isSameSeries(entry.title, series)) return false;
-      const eps = postEpisodes(entry.title);
-      const hasEpisode = eps.some((ep) => allowed.includes(ep));
-      const hasBatch = BATCH_KEYWORD.test(entry.title);
-      return hasEpisode || hasBatch;
-    });
+    }
 
     let previousFailure: string | undefined;
     for (const entry of matching.slice(0, 4)) {
       context.signal?.throwIfAborted();
       try {
         const entryResource = await context.load(entry.url, context.signal);
-        const result = await generic.resolve(entryResource, context);
+        const entryHtml = new TextDecoder().decode(entryResource.bytes);
+        const entryTitle = extractTistoryTitle(entryHtml) || entry.title;
+        const entryEps = postEpisodes(entryTitle);
+        const exactSingleEpisodePost =
+          entryEps.length === 1 &&
+          allowed.includes(entryEps[0]) &&
+          !BATCH_KEYWORD.test(entryTitle);
+        const entryContext: ResolverContext = exactSingleEpisodePost
+          ? {
+              ...context,
+              candidate: { ...context.candidate, requireEpisodeMatch: false },
+            }
+          : context;
+        const result = await generic.resolve(entryResource, entryContext);
         if (result.kind === 'file') return result;
         previousFailure = result.message;
       } catch (error) {
