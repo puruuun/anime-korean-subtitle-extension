@@ -292,4 +292,36 @@ describe('AUTO source acquisition and independent manual modes', () => {
     expect(translated).toHaveBeenCalledWith(expect.any(Array), c, 'ko');
     expect(out).toEqual([{ id: 1, startTime: 1, endTime: 3, text: 'Translated to EN' }]);
   });
+  it('resolves generic sites strictly from embedded sources with non-English fallback', async () => {
+    const anissia = provider('anissia');
+    const jimaku = provider('jimaku');
+    const genericContext = {
+      site: 'generic' as const,
+      animeId: 'https://video.example.org/watch/1',
+      title: 'Generic Clip',
+      episode: 1,
+      pageUrl: 'https://video.example.org/watch/1',
+    };
+    const pipe = new SubtitlePipeline(
+      [anissia, jimaku],
+      settings(),
+      vi.fn(),
+      new AbortController().signal,
+      async () => [
+        {
+          kind: 'texttrack',
+          language: 'fr',
+          cues: [{ id: 1, startTime: 0, endTime: 2, text: 'Salut' }],
+        },
+      ],
+    );
+    const result = await pipe.resolve(genericContext, 'ko');
+    expect(result).toEqual({
+      cues: [{ id: 1, startTime: 0, endTime: 2, text: 'Salut' }],
+      language: 'fr',
+      source: 'embedded-generic',
+    });
+    expect(anissia.search).not.toHaveBeenCalled();
+    expect(jimaku.search).not.toHaveBeenCalled();
+  });
 });

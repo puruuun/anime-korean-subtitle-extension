@@ -12,6 +12,7 @@ export interface Settings {
   googleSearch: { apiKey: string; cx: string };
   mode: 'ko' | 'ja' | 'en' | 'auto';
   autoApply: boolean;
+  allowedGenericHosts: string[];
   translation: {
     provider: 'lmstudio' | 'gemini';
     geminiApiKey: string;
@@ -38,6 +39,7 @@ export const defaultSettings: Settings = {
   targetLanguage: DEFAULT_TARGET_LANGUAGE,
   mode: 'auto',
   autoApply: true,
+  allowedGenericHosts: [],
   autoSources: { anissia: true, japaneseTranslation: true, embeddedEnglish: true },
   jimaku: { apiKey: '' },
   googleSearch: { apiKey: '', cx: '' },
@@ -68,6 +70,31 @@ function known<T extends object>(defaults: T, input?: Partial<T>): T {
     Object.entries(defaults).map(([key, value]) => [key, input?.[key as keyof T] ?? value]),
   ) as T;
 }
+export function isValidGenericHost(host: unknown): host is string {
+  return (
+    typeof host === 'string' &&
+    host.length > 0 &&
+    host.length <= 253 &&
+    /^[a-z0-9.-]+$/i.test(host) &&
+    !host.startsWith('.') &&
+    !host.endsWith('.') &&
+    !host.includes('..')
+  );
+}
+function normalizeGenericHosts(hosts: unknown): string[] {
+  if (!Array.isArray(hosts)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of hosts) {
+    if (typeof item !== 'string') continue;
+    const normalized = item.trim().toLowerCase();
+    if (!isValidGenericHost(normalized) || seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+    if (out.length >= 200) break;
+  }
+  return out;
+}
 export function normalizeSettings(settings?: Partial<Settings>): Settings {
   const translation = known(defaultSettings.translation, settings?.translation);
   if (!['lmstudio', 'gemini'].includes(translation.provider))
@@ -78,6 +105,7 @@ export function normalizeSettings(settings?: Partial<Settings>): Settings {
     schemaVersion: 3,
     targetLanguage: normalizeTargetLanguage(settings?.targetLanguage),
     autoApply: settings?.autoApply !== false,
+    allowedGenericHosts: normalizeGenericHosts(settings?.allowedGenericHosts),
     mode:
       mode && ['auto', 'ko', 'ja', 'en'].includes(mode)
         ? version < 2 && mode === 'ko'
@@ -110,6 +138,12 @@ export function validateSettings(s: Settings) {
       (typeof s.googleSearch?.apiKey !== 'string' || typeof s.googleSearch?.cx !== 'string'))
   )
     throw Error('자막 설정을 확인하세요.');
+  if (
+    !Array.isArray(s.allowedGenericHosts) ||
+    s.allowedGenericHosts.length > 200 ||
+    s.allowedGenericHosts.some((h) => !isValidGenericHost(h))
+  )
+    throw Error('허용된 웹 사이트 목록을 확인하세요.');
   const u = new URL(s.translation.baseUrl);
   if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.search || u.hash)
     throw Error('Base URL 형식을 확인하세요.');

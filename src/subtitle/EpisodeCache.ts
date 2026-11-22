@@ -11,7 +11,7 @@ export interface EpisodeSnapshot {
   originalCues?: SubtitleCue[];
   japaneseCues?: SubtitleCue[];
   japaneseSource?: string;
-  language: 'ko' | 'ja' | 'en';
+  language: string;
   source: string;
   path?: string;
   translation?: TranslationBufferStatus;

@@ -26,6 +26,7 @@ import {
   type AutoEpisode,
 } from './autoRetry';
 import { AppError } from '../utils/errors';
+import * as frameManager from './frameManager';
 import {
   applyCues,
   injectFrames,
@@ -83,6 +84,16 @@ async function nextEpoch(tabId: number) {
   return epoch;
 }
 export const isSite = supportedSite;
+async function isTabSupported(tabId: number, url?: string): Promise<boolean> {
+  if (Object.keys(frameManager).includes('supportedTab')) {
+    return frameManager.supportedTab(tabId);
+  }
+  return isSite(url);
+}
+function maybeEnsureJapanese(tabId: number, j: Job) {
+  if (j.status.context.site === 'generic') return;
+  ensureJapanese(tabId, j, japaneseDeps);
+}
 function active(tabId: number, j: Job) {
   return jobs.get(tabId) === j && !j.controller.signal.aborted;
 }
@@ -246,7 +257,8 @@ async function startJobInternal(
   refresh = false,
 ) {
   const tab = await chrome.tabs.get(tabId);
-  if (!isSite(tab.url)) throw Error('Miruro 또는 Re:ANIME 영상 페이지에서 사용하세요.');
+  if (!(await isTabSupported(tabId, tab.url)))
+    throw Error('지원하는 영상 페이지에서 사용하세요.');
   if (!['ko', 'ja', 'en', 'auto'].includes(mode)) throw Error('자막 모드를 확인하세요.');
   const previous = jobs.get(tabId);
   const selected = selectedId
@@ -355,7 +367,7 @@ async function startJobInternal(
             : '저장된 자막 적용 · 나머지 번역을 이어갑니다.',
         });
         await persistRender(tabId, j);
-        ensureJapanese(tabId, j, japaneseDeps);
+        maybeEnsureJapanese(tabId, j);
         if (cached.complete) {
           j.status.busy = false;
           await publish(tabId, j, {
@@ -365,30 +377,36 @@ async function startJobInternal(
           return;
         }
       }
-      const c = cached ? j.status.context : await resolveAnime(detected, j.controller.signal);
+      const c = cached
+        ? j.status.context
+        : detected.site === 'generic'
+          ? detected
+          : await resolveAnime(detected, j.controller.signal);
       j.controller.signal.throwIfAborted();
       if (!active(tabId, j)) return;
       j.status.context = c;
       j.status.offset = await getOffset(c);
       log('Context', { site: c.site, episode: c.episode, anilistId: c.anilistId });
       const core = new SubtitleCore(
-        mode === 'en' ? [] : createProviders(s, j.controller.signal),
+        mode === 'en' || c.site === 'generic' ? [] : createProviders(s, j.controller.signal),
         s,
         (st) => {
           void publish(tabId, j, st);
           if (st.translation?.chunks[0]?.state === 'failed') void releaseBootstrap(tabId, j);
         },
         j.controller.signal,
-        () => collectSubtitles(tabId),
+        () => collectSubtitles(tabId, c.site === 'generic' ? 'any' : undefined),
         {
           onSource: async (result) => {
             if (!active(tabId, j)) return;
-            j.sourceLanguage = result.language === 'ko' ? undefined : result.language;
+            j.sourceLanguage = sameBaseLanguage(result.language, s.targetLanguage)
+              ? undefined
+              : result.language;
             if (result.language === 'ja') {
               j.japaneseCues = result.cues;
               j.japaneseSource = result.source;
             }
-            ensureJapanese(tabId, j, japaneseDeps);
+            maybeEnsureJapanese(tabId, j);
           },
           onStart: async (original, language, queue) => {
             if (!active(tabId, j)) return;
@@ -398,7 +416,7 @@ async function startJobInternal(
             if (language === 'ja') {
               j.japaneseCues = original;
               j.japaneseSource = j.status.source;
-              ensureJapanese(tabId, j, japaneseDeps);
+              maybeEnsureJapanese(tabId, j);
             }
             await readPlayback(tabId, j);
             await persistRender(tabId, j);
@@ -775,8 +793,9 @@ export async function preferencesChanged() {
   const tabs = await chrome.tabs.query({});
   await Promise.allSettled(
     tabs
-      .filter((tab) => tab.id !== undefined && isSite(tab.url))
+      .filter((tab) => tab.id !== undefined)
       .map(async (tab) => {
+        if (!(await isTabSupported(tab.id!, tab.url))) return;
         await cancelJob(tab.id!);
         const settings = await getSettings();
         if (settings.mode === 'auto' && settings.autoApply) {
@@ -794,7 +813,8 @@ export async function displayPreferencesChanged() {
   // render state so toggling the extra track never restarts Korean acquisition.
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
-    if (tab.id === undefined || !isSite(tab.url) || jobs.has(tab.id)) continue;
+    if (tab.id === undefined || jobs.has(tab.id) || !(await isTabSupported(tab.id, tab.url)))
+      continue;
     const id = tab.id;
     const stored = await chrome.storage.session.get(['job:' + id, 'render:' + id]);
     const status = stored['job:' + id] as JobStatus | undefined;
@@ -864,7 +884,7 @@ export async function displayPreferencesChanged() {
           japaneseDeps,
         );
       } else if (j.cues.length || j.originalCues?.length || j.japaneseCues?.length)
-        ensureJapanese(tabId, j, japaneseDeps);
+        maybeEnsureJapanese(tabId, j);
       await persistRender(tabId, j);
     }),
   );

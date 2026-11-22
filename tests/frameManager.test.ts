@@ -83,4 +83,58 @@ describe('frameManager', () => {
     expect(after[0].hasVideo).toBeUndefined();
     expect(after[0].area).toBeUndefined();
   });
+
+  it('activates generic tabs, checks supportedTab against activeGenericTabs and allowedGenericHosts, and forwards language in collectSubtitles', async () => {
+    const genericUrl = 'https://video.example.com/watch/123';
+    const executeScript = vi.fn(async () => []);
+    const sendMessage = vi.fn(async (_tabId: number, msg: { type: string; language?: string }) => {
+      if (msg.type === 'FRAME_PROBE') return { video: true };
+      if (msg.type === 'SOURCES') {
+        expect(msg.language).toBe('any');
+        return { sources: [{ language: 'es', kind: 'file', url: 'https://cdn.example/es.vtt' }] };
+      }
+      return null;
+    });
+
+    vi.stubGlobal('chrome', {
+      storage: {
+        local: {
+          get: vi.fn(async () => ({ settings: { allowedGenericHosts: ['auto.example.com'] } })),
+          set: vi.fn(),
+        },
+      },
+      tabs: {
+        get: vi.fn(async (tabId: number) => ({
+          id: tabId,
+          url: tabId === 99 ? 'https://auto.example.com/clip' : genericUrl,
+        })),
+        sendMessage,
+        onRemoved: { addListener: vi.fn() },
+      },
+      webNavigation: {
+        getAllFrames: vi.fn(async () => [{ frameId: 0 }, { frameId: 5 }]),
+        onCommitted: { addListener: vi.fn() },
+      },
+      scripting: { executeScript },
+    });
+
+    const fm = await import('../src/background/frameManager');
+    expect(await fm.supportedTab(10)).toBe(false);
+    expect(fm.isGenericTabActive(10)).toBe(false);
+    expect(await fm.supportedTab(99)).toBe(true);
+
+    await fm.activateGenericTab(10);
+    expect(fm.isGenericTabActive(10)).toBe(true);
+    expect(await fm.supportedTab(10)).toBe(true);
+    expect(executeScript).toHaveBeenCalledTimes(4);
+
+    const sources = await fm.collectSubtitles(10, 'any');
+    expect(sources).toEqual([
+      { language: 'es', kind: 'file', url: 'https://cdn.example/es.vtt' },
+    ]);
+
+    fm.forgetTabFrames(10);
+    expect(fm.isGenericTabActive(10)).toBe(false);
+    expect(await fm.supportedTab(10)).toBe(false);
+  });
 });

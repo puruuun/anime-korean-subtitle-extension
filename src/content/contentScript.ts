@@ -219,14 +219,20 @@ if (!window.__animeSubIsolatedV1) {
       });
     }
     if (m.type === 'SOURCES') {
-      detectEmbedded().then(
+      const lang =
+        typeof m.language === 'string' && m.language
+          ? m.language
+          : adapterFor(location.href)
+            ? undefined
+            : 'any';
+      detectEmbedded(lang).then(
         (sources) => reply({ ok: true, sources }),
         () => reply({ ok: false, sources: [] }),
       );
       return true;
     }
     if (m.type === 'CONTEXT') {
-      const a = adapterFor(location.href);
+      const a = adapterFor(location.href, true);
       if (!a) {
         reply({ ok: false, error: '지원하는 사이트가 아닙니다.' });
         return;

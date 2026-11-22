@@ -70,6 +70,7 @@ export class TranslationQueue {
   private episodeSignal?: AbortSignal;
   private sourceId = 'embedded-en';
   private targetLanguage = DEFAULT_TARGET_LANGUAGE;
+  private contentKind: 'anime' | 'general' = 'anime';
   private animeTitle?: string;
 
   constructor(
@@ -128,6 +129,7 @@ export class TranslationQueue {
     signal?: AbortSignal,
     sourceId = language === 'en' ? 'embedded-en' : 'external-ja',
     targetLanguage = DEFAULT_TARGET_LANGUAGE,
+    contentKind: 'anime' | 'general' = context.site === 'generic' ? 'general' : 'anime',
   ): Promise<SubtitleCue[]> {
     if (this.running) throw new AppError('QUEUE', '이미 번역 중인 회차입니다.');
     signal?.throwIfAborted();
@@ -138,6 +140,7 @@ export class TranslationQueue {
     this.episodeSignal = signal;
     this.sourceId = sourceId;
     this.targetLanguage = normalizeTargetLanguage(targetLanguage);
+    this.contentKind = contentKind;
     this.bootstrapReady = false;
     this.animeTitle = animeContextTitle(context);
     // Sorting copies the array, never modifies cue IDs, timecodes, or the caller's input.
@@ -363,6 +366,7 @@ export class TranslationQueue {
         const raw = await this.provider.translate(input, {
           sourceLanguage: language,
           targetLanguage: this.targetLanguage,
+          contentKind: this.contentKind,
           previousContext,
           ...(this.animeTitle ? { animeTitle: this.animeTitle } : {}),
           // Raw context is deterministic. Never key a chunk on another chunk's translated text.

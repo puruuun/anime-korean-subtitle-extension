@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   defaultSettings,
   getSettings,
+  normalizeSettings,
   saveSettings,
   validateSettings,
   type Settings,
@@ -182,6 +183,52 @@ describe('display validation with partial display settings', () => {
       const invalid = structuredClone(defaultSettings);
       invalid.display = { ...invalidDisplay } as unknown as Settings['display'];
       expect(() => validateSettings(invalid)).toThrow('자막 표시 설정 범위를 확인하세요.');
+    }
+  });
+});
+
+describe('allowedGenericHosts normalization and validation', () => {
+  it('deduplicates, trims, lowercases, filters invalid hostnames and caps at 200 entries', () => {
+    const many = Array.from({ length: 210 }, (_, i) => `Site-${i}.Example.com`);
+    const normalized = normalizeSettings({
+      allowedGenericHosts: [
+        '  YouTube.COM  ',
+        'youtube.com',
+        'https://vimeo.com/123',
+        'bad host.com',
+        'example.org/path',
+        '',
+        '..',
+        'sub.domain-1.net',
+        ...many,
+      ],
+    });
+    expect(normalized.allowedGenericHosts).toHaveLength(200);
+    expect(normalized.allowedGenericHosts.slice(0, 3)).toEqual([
+      'youtube.com',
+      'sub.domain-1.net',
+      'site-0.example.com',
+    ]);
+  });
+
+  it('rejects non-arrays and URLs, protocols, paths, or whitespace in validateSettings', () => {
+    const nonArray = structuredClone(defaultSettings);
+    nonArray.allowedGenericHosts = 'example.com' as unknown as string[];
+    expect(() => validateSettings(nonArray)).toThrow('허용된 웹 사이트 목록을 확인하세요.');
+
+    for (const badHost of [
+      '',
+      '   ',
+      'https://example.com',
+      'http://example.com',
+      'example.com/watch',
+      'bad host.com',
+      'a..b.com',
+      '.example.com',
+    ]) {
+      const invalid = structuredClone(defaultSettings);
+      invalid.allowedGenericHosts = [badHost];
+      expect(() => validateSettings(invalid)).toThrow('허용된 웹 사이트 목록을 확인하세요.');
     }
   });
 });

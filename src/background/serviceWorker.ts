@@ -14,16 +14,25 @@ import {
   preferencesChanged,
   displayPreferencesChanged,
 } from './messageRouter';
-import { getSettings, saveSettings, validateSettings, type Settings } from '../storage/settings';
+import {
+  getSettings,
+  isValidGenericHost,
+  saveSettings,
+  validateSettings,
+  type Settings,
+} from '../storage/settings';
 import { setOffset } from '../storage/offsets';
 import { database } from '../storage/database';
 import {
+  activateGenericTab,
   frameInventory,
   injectFrames,
   recordFrame,
   collectSubtitles,
+  supportedSite,
   supportedTab,
 } from './frameManager';
+import { isWebVideoUrl } from '../sites/adapter';
 import { createTranslationProvider } from '../translation/createTranslationProvider';
 import { errorText } from '../utils/errors';
 import { safeSetAccessLevel } from '../platform/browser';
@@ -206,6 +215,23 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
       case 'INJECT_FRAMES':
         await injectFrames(m.tabId);
         return { ok: true };
+      case 'ACTIVATE_GENERIC_TAB':
+        await activateGenericTab(m.tabId);
+        return { ok: true };
+      case 'TOGGLE_GENERIC_AUTO_HOST': {
+        const rawHost =
+          typeof m.host === 'string' ? m.host : typeof m.hostname === 'string' ? m.hostname : '';
+        const host = rawHost.trim().toLowerCase();
+        if (!isValidGenericHost(host)) throw Error('유효한 호스트 이름이 아닙니다.');
+        const s = await getSettings();
+        const has = s.allowedGenericHosts.includes(host);
+        const nextEnabled = typeof m.enabled === 'boolean' ? m.enabled : !has;
+        s.allowedGenericHosts = nextEnabled
+          ? [...s.allowedGenericHosts.filter((h) => h !== host), host]
+          : s.allowedGenericHosts.filter((h) => h !== host);
+        await saveSettings(s);
+        return { ok: true, allowedGenericHosts: s.allowedGenericHosts };
+      }
       case 'OFFSET': {
         if (!(await supportedTab(m.tabId))) throw Error('지원 사이트가 아닙니다.');
         const status = await currentStatus(m.tabId);
@@ -238,4 +264,20 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
         if (supported) return episodeNavigating(details.tabId);
       })
       .catch(() => {});
+});
+
+chrome.webNavigation.onCompleted.addListener((details) => {
+  if (details.frameId !== 0 || supportedSite(details.url) || !isWebVideoUrl(details.url)) return;
+  void (async () => {
+    try {
+      const u = new URL(details.url);
+      const host = u.hostname.toLowerCase();
+      const settings = await getSettings();
+      if (!settings.allowedGenericHosts.includes(host)) return;
+      const origin = u.origin.replace(/:\d+$/, '') + '/*';
+      // Never prompt for permissions in an automatic navigation listener.
+      if (!(await chrome.permissions.contains({ origins: [origin] }))) return;
+      await activateGenericTab(details.tabId);
+    } catch {}
+  })();
 });
