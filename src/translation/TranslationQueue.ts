@@ -6,6 +6,7 @@ import { AppError } from '../utils/errors';
 import { log } from '../utils/logger';
 import { chunkCues } from './TranslationManager';
 import { TranslationCache, translationKey, type TranslationStore } from './TranslationCache';
+import { DEFAULT_TARGET_LANGUAGE, normalizeTargetLanguage } from './languages';
 import { animeContextTitle } from './prompts';
 import {
   validateTranslations,
@@ -68,6 +69,7 @@ export class TranslationQueue {
   private running = false;
   private episodeSignal?: AbortSignal;
   private sourceId = 'embedded-en';
+  private targetLanguage = DEFAULT_TARGET_LANGUAGE;
   private animeTitle?: string;
 
   constructor(
@@ -121,10 +123,11 @@ export class TranslationQueue {
   async run(
     cues: SubtitleCue[],
     context: AnimeContext,
-    language: 'ja' | 'en',
+    language: string,
     callbacks: TranslationQueueCallbacks,
     signal?: AbortSignal,
     sourceId = language === 'en' ? 'embedded-en' : 'external-ja',
+    targetLanguage = DEFAULT_TARGET_LANGUAGE,
   ): Promise<SubtitleCue[]> {
     if (this.running) throw new AppError('QUEUE', '이미 번역 중인 회차입니다.');
     signal?.throwIfAborted();
@@ -134,6 +137,7 @@ export class TranslationQueue {
     this.callbacks = callbacks;
     this.episodeSignal = signal;
     this.sourceId = sourceId;
+    this.targetLanguage = normalizeTargetLanguage(targetLanguage);
     this.bootstrapReady = false;
     this.animeTitle = animeContextTitle(context);
     // Sorting copies the array, never modifies cue IDs, timecodes, or the caller's input.
@@ -149,6 +153,7 @@ export class TranslationQueue {
         language,
         this.config,
         this.sourceId,
+        this.targetLanguage,
       );
       signal?.throwIfAborted();
       await this.prepare(context, language, signal);
@@ -252,7 +257,7 @@ export class TranslationQueue {
     }
   }
 
-  private async prepare(context: AnimeContext, language: 'ja' | 'en', signal?: AbortSignal) {
+  private async prepare(context: AnimeContext, language: string, signal?: AbortSignal) {
     const initialCount = Math.min(this.config.initialChunkSize ?? 20, this.config.chunkSize);
     const first = chunkCues(this.source, initialCount, this.config.maxCharacters)[0] ?? [];
     const parts = first.length
@@ -273,6 +278,7 @@ export class TranslationQueue {
         language,
         this.config,
         this.sourceId,
+        this.targetLanguage,
       )) +
       ':initial:' +
       initialCount;
@@ -337,7 +343,7 @@ export class TranslationQueue {
 
   private async translateChunk(
     chunk: QueueChunk,
-    language: 'ja' | 'en',
+    language: string,
     signal: AbortSignal,
   ): Promise<TranslatedCue[]> {
     const input = this.input(chunk.source);
@@ -347,6 +353,7 @@ export class TranslationQueue {
       chunk.attempts++;
       log('Translation', {
         source: language,
+        target: this.targetLanguage,
         provider: this.provider.id,
         chunk: chunk.index + 1,
         total: this.chunks.length,
@@ -355,6 +362,7 @@ export class TranslationQueue {
       try {
         const raw = await this.provider.translate(input, {
           sourceLanguage: language,
+          targetLanguage: this.targetLanguage,
           previousContext,
           ...(this.animeTitle ? { animeTitle: this.animeTitle } : {}),
           // Raw context is deterministic. Never key a chunk on another chunk's translated text.

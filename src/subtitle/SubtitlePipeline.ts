@@ -13,6 +13,7 @@ import { withDeadline } from '../utils/deadline';
 import { AppError } from '../utils/errors';
 import { log } from '../utils/logger';
 import { normalizeEpisode } from '../anime/episodeNormalizer';
+import { sameBaseLanguage } from '../translation/languages';
 export type Mode = Settings['mode'];
 export interface PipelineResult {
   cues: SubtitleCue[];
@@ -302,7 +303,7 @@ export class SubtitlePipeline {
       );
     }
     const enabled = this.settings.autoSources;
-    if (enabled.anissia) {
+    if (enabled.anissia && sameBaseLanguage(this.settings.targetLanguage || 'ko', 'ko')) {
       const ko = await this.korean(c, false);
       if (ko) return ko;
     }

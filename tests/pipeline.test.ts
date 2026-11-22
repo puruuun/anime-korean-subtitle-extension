@@ -259,4 +259,37 @@ describe('AUTO source acquisition and independent manual modes', () => {
     });
     expect(run).not.toHaveBeenCalled();
   });
+  it('skips Korean external search when targetLanguage is en and skips AI translation for embedded English', async () => {
+    const anissia = provider('anissia');
+    const jimaku = provider('jimaku', []);
+    const kitsunekko = provider('kitsunekko', []);
+    const s = { ...settings(), targetLanguage: 'en' };
+    class Core extends SubtitleCore {
+      protected override translate = vi.fn();
+    }
+    const core = new Core([anissia, jimaku, kitsunekko], s, vi.fn(), new AbortController().signal, english);
+    const out = await core.run(c, 'auto');
+    expect(out).toEqual([{ id: 1, startTime: 1, endTime: 3, text: 'Hello' }]);
+    expect(anissia.search).not.toHaveBeenCalled();
+    expect(core['translate']).not.toHaveBeenCalled();
+  });
+  it('translates Korean source subtitles when targetLanguage is non-Korean instead of short-circuiting', async () => {
+    const anissia = provider('anissia', [candidate('anissia', { language: 'ko' })]);
+    const translated = vi.fn(
+      async (cues: import('../src/subtitle/SubtitleCue').SubtitleCue[]) =>
+        cues.map((cue) => ({ ...cue, text: 'Translated to EN' })),
+    );
+    class Core extends SubtitleCore {
+      protected override translate = translated;
+    }
+    const core = new Core(
+      [anissia],
+      { ...settings(), targetLanguage: 'en' },
+      vi.fn(),
+      new AbortController().signal,
+    );
+    const out = await core.run(c, 'ko');
+    expect(translated).toHaveBeenCalledWith(expect.any(Array), c, 'ko');
+    expect(out).toEqual([{ id: 1, startTime: 1, endTime: 3, text: 'Translated to EN' }]);
+  });
 });

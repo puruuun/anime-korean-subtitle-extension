@@ -7,7 +7,9 @@ export interface TranslatedCue {
   text: string;
 }
 export interface TranslationOptions {
-  sourceLanguage: 'ja' | 'en';
+  sourceLanguage: string;
+  targetLanguage?: string;
+  contentKind?: 'anime' | 'general';
   previousContext: TranslationCue[];
   animeTitle?: string;
   signal?: AbortSignal;

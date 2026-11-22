@@ -15,6 +15,7 @@ import { errorText } from '../utils/errors';
 import { setDebug, log } from '../utils/logger';
 import { getOffset } from '../storage/offsets';
 import { EpisodeCache, episodeCacheKey } from '../subtitle/EpisodeCache';
+import { sameBaseLanguage } from '../translation/languages';
 import type { JapaneseStatus } from '../subtitle/SecondaryJapanese';
 import { settleWorkClock } from './jobClock';
 import {
@@ -336,7 +337,9 @@ async function startJobInternal(
         j.status.path = cached.path;
         j.status.cached = true;
         j.cues = cached.cues;
-        j.sourceLanguage = cached.language === 'ko' ? undefined : cached.language;
+        j.sourceLanguage = sameBaseLanguage(cached.language, s.targetLanguage)
+          ? undefined
+          : cached.language;
         j.originalCues = cached.originalCues;
         j.japaneseCues =
           cached.japaneseCues ?? (cached.language === 'ja' ? cached.originalCues : undefined);
@@ -344,7 +347,7 @@ async function startJobInternal(
           cached.japaneseSource ?? (cached.language === 'ja' ? cached.source : undefined);
         j.status.translation = cached.translation;
         j.bootstrapReady = true;
-        await applyCues(tabId, j.cues, s.display, j.status.offset, epoch);
+        await applyCues(tabId, j.cues, s.display, j.status.offset, epoch, s.targetLanguage);
         await publish(tabId, j, {
           stage: cached.complete ? 'done' : 'translate',
           message: cached.complete
@@ -431,7 +434,7 @@ async function startJobInternal(
         c,
         mode,
         selected,
-        cached?.originalCues && cached.language !== 'ko'
+        cached?.originalCues && !sameBaseLanguage(cached.language, s.targetLanguage)
           ? { cues: cached.originalCues, language: cached.language, source: cached.source }
           : undefined,
       );
@@ -440,7 +443,7 @@ async function startJobInternal(
       if (!j.queue) {
         j.cues = cues;
         j.bootstrapReady = true;
-        await applyCues(tabId, cues, s.display, j.status.offset, epoch);
+        await applyCues(tabId, cues, s.display, j.status.offset, epoch, s.targetLanguage);
       }
       await releaseBootstrap(tabId, j);
       j.status.busy = false;
@@ -844,10 +847,12 @@ export async function displayPreferencesChanged() {
     [...jobs].map(async ([tabId, j]) => {
       if (!active(tabId, j)) return;
       j.settings.display = settings.display;
+      j.settings.targetLanguage = settings.targetLanguage;
       await sendVideoMessage(tabId, {
         type: 'DISPLAY',
         epoch: j.status.epoch,
         display: settings.display,
+        targetLanguage: settings.targetLanguage,
       });
       if (!settings.display.showJapanese) {
         j.japaneseController?.abort();

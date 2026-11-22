@@ -4,6 +4,7 @@ import type { Settings } from '../storage/settings';
 import type { SubtitleCue } from './SubtitleCue';
 import type { TranslationBufferStatus } from '../translation/TranslationQueue';
 import { PROMPT_VERSION } from '../translation/prompts';
+import { normalizeTargetLanguage } from '../translation/languages';
 export interface EpisodeSnapshot {
   context: AnimeContext;
   cues: SubtitleCue[];
@@ -23,6 +24,7 @@ export function episodeCacheKey(c: AnimeContext, s: Settings, mode: Settings['mo
     'episode:v1',
     episodeKey(c),
     mode,
+    normalizeTargetLanguage(s.targetLanguage),
     s.autoSources,
     t.provider,
     t.provider === 'gemini' ? t.geminiModel : t.model,

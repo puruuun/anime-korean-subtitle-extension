@@ -1,6 +1,12 @@
 import { defaultDisplay, type DisplaySettings } from '../subtitle/SubtitleRenderer';
+import {
+  DEFAULT_TARGET_LANGUAGE,
+  isValidTargetLanguage,
+  normalizeTargetLanguage,
+} from '../translation/languages';
 export interface Settings {
-  schemaVersion: 2;
+  schemaVersion: 3;
+  targetLanguage: string;
   autoSources: { anissia: boolean; japaneseTranslation: boolean; embeddedEnglish: boolean };
   jimaku: { apiKey: string };
   googleSearch: { apiKey: string; cx: string };
@@ -28,7 +34,8 @@ export interface Settings {
   debug: boolean;
 }
 export const defaultSettings: Settings = {
-  schemaVersion: 2,
+  schemaVersion: 3,
+  targetLanguage: DEFAULT_TARGET_LANGUAGE,
   mode: 'auto',
   autoApply: true,
   autoSources: { anissia: true, japaneseTranslation: true, embeddedEnglish: true },
@@ -66,12 +73,14 @@ export function normalizeSettings(settings?: Partial<Settings>): Settings {
   if (!['lmstudio', 'gemini'].includes(translation.provider))
     translation.provider = defaultSettings.translation.provider;
   const mode = settings?.mode;
+  const version = settings?.schemaVersion ?? 0;
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    targetLanguage: normalizeTargetLanguage(settings?.targetLanguage),
     autoApply: settings?.autoApply !== false,
     mode:
       mode && ['auto', 'ko', 'ja', 'en'].includes(mode)
-        ? settings?.schemaVersion !== 2 && mode === 'ko'
+        ? version < 2 && mode === 'ko'
           ? 'auto'
           : mode
         : 'auto',
@@ -93,6 +102,7 @@ export async function getSettings(): Promise<Settings> {
 export function validateSettings(s: Settings) {
   if (
     !['auto', 'ko', 'ja', 'en'].includes(s.mode) ||
+    !isValidTargetLanguage(s.targetLanguage) ||
     typeof s.autoApply !== 'boolean' ||
     Object.values(s.autoSources).some((v) => typeof v !== 'boolean') ||
     typeof s.jimaku.apiKey !== 'string' ||

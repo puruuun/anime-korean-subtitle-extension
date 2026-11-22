@@ -37,7 +37,17 @@ export class GeminiProvider implements TranslationProvider {
         method: 'POST',
         headers: this.headers(),
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt(options.sourceLanguage) }] },
+          systemInstruction: {
+            parts: [
+              {
+                text: systemPrompt(
+                  options.sourceLanguage,
+                  options.targetLanguage,
+                  options.contentKind,
+                ),
+              },
+            ],
+          },
           contents: [
             {
               role: 'user',

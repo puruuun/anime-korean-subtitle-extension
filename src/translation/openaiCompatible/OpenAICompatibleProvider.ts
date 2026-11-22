@@ -36,7 +36,14 @@ export class OpenAICompatibleProvider implements TranslationProvider {
           model: this.config.model,
           temperature: this.config.temperature,
           messages: [
-            { role: 'system', content: systemPrompt(options.sourceLanguage) },
+            {
+              role: 'system',
+              content: systemPrompt(
+                options.sourceLanguage,
+                options.targetLanguage,
+                options.contentKind,
+              ),
+            },
             {
               role: 'user',
               content: JSON.stringify({

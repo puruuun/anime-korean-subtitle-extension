@@ -1,5 +1,10 @@
 import type { SubtitleCue } from './SubtitleCue';
 import type { TranslationBufferStatus } from '../translation/TranslationQueue';
+import {
+  DEFAULT_TARGET_LANGUAGE,
+  languageLabel,
+  normalizeTargetLanguage,
+} from '../translation/languages';
 export interface DisplaySettings {
   fontSize: number;
   bottom: number;
@@ -136,6 +141,7 @@ export class SubtitleRenderer {
   private last = '';
   private lastRect = '';
   private immediatePlayback = false;
+  private targetLanguage = DEFAULT_TARGET_LANGUAGE;
   private originalTrackModes = new Map<TextTrack, TextTrackMode>();
   private translationStatus: TranslationBufferStatus | undefined;
   private translationStage: string | undefined;
@@ -201,6 +207,19 @@ export class SubtitleRenderer {
     this.immediatePlayback = immediate;
     this.render();
   }
+  setTargetLanguage(language: string) {
+    const next = normalizeTargetLanguage(language);
+    if (next === this.targetLanguage) return;
+    this.targetLanguage = next;
+    if (this.native) {
+      this.native.mode = 'disabled';
+      for (const c of this.nativeCues) this.native.removeCue(c);
+      this.nativeCues = [];
+      this.native = undefined;
+    }
+    this.nativeRevision++;
+    this.render();
+  }
   setTranslationStatus(status?: TranslationBufferStatus, stage?: string, message?: string) {
     this.translationStatus = status;
     this.translationStage = stage;
@@ -248,7 +267,12 @@ export class SubtitleRenderer {
       return;
     }
     for (const track of Array.from(this.video.textTracks ?? [])) {
-      if (track === this.native || track.label === '한국어 · AnimeSub' || track.mode !== 'showing')
+      if (
+        track === this.native ||
+        track.label === '한국어 · AnimeSub' ||
+        track.label.endsWith(' · WebSub') ||
+        track.mode !== 'showing'
+      )
         continue;
       if (!this.originalTrackModes.has(track)) this.originalTrackModes.set(track, track.mode);
       track.mode = 'hidden';
@@ -324,7 +348,12 @@ export class SubtitleRenderer {
       return;
     }
     if (this.syncedNativeRevision === this.nativeRevision) return;
-    if (!this.native) this.native = this.video.addTextTrack('subtitles', '한국어 · AnimeSub', 'ko');
+    if (!this.native)
+      this.native = this.video.addTextTrack(
+        'subtitles',
+        `${languageLabel(this.targetLanguage)} · WebSub`,
+        this.targetLanguage,
+      );
     for (const c of this.nativeCues) this.native.removeCue(c);
     this.nativeCues = [];
     if (typeof VTTCue !== 'undefined') {

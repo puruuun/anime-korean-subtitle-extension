@@ -45,6 +45,9 @@ describe('cache before network search', () => {
     changed.translation.model = '';
     changed.autoSources.anissia = false;
     expect(episodeCacheKey(context, changed, 'auto')).not.toBe(key);
+    changed.autoSources.anissia = true;
+    changed.targetLanguage = 'en';
+    expect(episodeCacheKey(context, changed, 'auto')).not.toBe(key);
   });
 
   it('expires old entries and allows the normal search path to resume', async () => {

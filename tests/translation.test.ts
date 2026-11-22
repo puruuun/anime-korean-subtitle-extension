@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { chunkCues, TranslationManager } from '../src/translation/TranslationManager';
 import { validateTranslations } from '../src/translation/TranslationProvider';
-import { TranslationCache } from '../src/translation/TranslationCache';
+import { TranslationCache, translationKey } from '../src/translation/TranslationCache';
+import { systemPrompt } from '../src/translation/prompts';
 import { defaultSettings } from '../src/storage/settings';
 import { AppError } from '../src/utils/errors';
 const context = {
@@ -70,5 +71,15 @@ describe('translation invariants', () => {
     );
     await reopened.translate(cues, context, 'en', () => {});
     expect(fn).toHaveBeenCalledTimes(4);
+  });
+  it('separates translationKey by targetLanguage and targets requested language in systemPrompt', async () => {
+    const koKey = await translationKey(context, 'same', 'ja', defaultSettings.translation, 'jimaku', 'ko');
+    const enKey = await translationKey(context, 'same', 'ja', defaultSettings.translation, 'jimaku', 'en');
+    const zhKey = await translationKey(context, 'same', 'ja', defaultSettings.translation, 'jimaku', 'zh-CN');
+    expect(new Set([koKey, enKey, zhKey]).size).toBe(3);
+
+    expect(systemPrompt('ja', 'ko')).toContain('한국어');
+    expect(systemPrompt('ja', 'en')).toContain('English');
+    expect(systemPrompt('ja', 'zh-CN')).toContain('Simplified Chinese');
   });
 });
