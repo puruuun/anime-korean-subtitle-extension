@@ -2,6 +2,7 @@ import { database } from '../storage/database';
 import { contextKey, type AnimeContext } from '../anime/AnimeContext';
 import { subtitleHash } from '../subtitle/SubtitleCache';
 import type { Settings } from '../storage/settings';
+import { DEFAULT_TARGET_LANGUAGE, normalizeTargetLanguage } from './languages';
 import { PROMPT_VERSION } from './prompts';
 export interface TranslationStore {
   get<T>(key: string): Promise<T | undefined>;
@@ -18,9 +19,10 @@ export class TranslationCache implements TranslationStore {
 export async function translationKey(
   c: AnimeContext,
   source: string,
-  language: 'ja' | 'en',
+  language: string,
   s: Settings['translation'],
   sourceId = language === 'en' ? 'embedded-en' : 'external-ja',
+  targetLanguage = DEFAULT_TARGET_LANGUAGE,
 ) {
   return subtitleHash(
     JSON.stringify({
@@ -28,7 +30,7 @@ export async function translationKey(
       sourceHash: await subtitleHash(source),
       sourceLanguage: language,
       sourceId,
-      targetLanguage: 'ko',
+      targetLanguage: normalizeTargetLanguage(targetLanguage),
       provider: s.provider,
       endpoint:
         s.provider === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta' : s.baseUrl,

@@ -139,7 +139,11 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
         const previous = await getSettings();
         await saveSettings(m.settings);
         const next = await getSettings();
-        if (previous.mode !== next.mode || previous.autoApply !== next.autoApply)
+        if (
+          previous.mode !== next.mode ||
+          previous.autoApply !== next.autoApply ||
+          previous.targetLanguage !== next.targetLanguage
+        )
           await preferencesChanged();
         else if (JSON.stringify(previous.display) !== JSON.stringify(next.display))
           await displayPreferencesChanged();

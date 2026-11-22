@@ -88,7 +88,8 @@ describe('source settings migration', () => {
     vi.stubGlobal('chrome', { storage: { local: { get: async () => ({ settings: raw }), set } } });
     const current = await getSettings();
     expect(current.mode).toBe('auto');
-    expect(current.schemaVersion).toBe(2);
+    expect(current.schemaVersion).toBe(3);
+    expect(current.targetLanguage).toBe('ko');
     expect(current.autoSources).toEqual({
       anissia: true,
       japaneseTranslation: true,
@@ -107,6 +108,27 @@ describe('source settings migration', () => {
         storage: { local: { get: async () => ({ settings: { mode } }), set: vi.fn() } },
       });
       expect((await getSettings()).mode).toBe(mode === 'removed-provider' ? 'auto' : mode);
+    }
+  });
+  it('migrates v2 to v3 preserving explicit manual ko mode and defaulting targetLanguage to ko', async () => {
+    vi.stubGlobal('chrome', {
+      storage: {
+        local: {
+          get: async () => ({ settings: { schemaVersion: 2, mode: 'ko' } }),
+          set: vi.fn(),
+        },
+      },
+    });
+    const current = await getSettings();
+    expect(current.schemaVersion).toBe(3);
+    expect(current.mode).toBe('ko');
+    expect(current.targetLanguage).toBe('ko');
+  });
+  it('rejects invalid targetLanguage during validation', () => {
+    for (const bad of ['', '   ', 'english-invalid', 123 as unknown as string]) {
+      const invalid = structuredClone(defaultSettings);
+      invalid.targetLanguage = bad;
+      expect(() => validateSettings(invalid)).toThrow('자막 설정을 확인하세요.');
     }
   });
 });

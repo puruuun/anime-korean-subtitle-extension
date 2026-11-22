@@ -124,6 +124,32 @@ describe('renderer lifecycle', () => {
     renderer.destroy();
     vi.unstubAllGlobals();
   });
+  it('passes targetLanguage to addTextTrack when setTargetLanguage is called', () => {
+    const { renderer, video } = fixture();
+    const native = {
+      mode: 'disabled',
+      addCue: vi.fn(),
+      removeCue: vi.fn(),
+    } as unknown as TextTrack;
+    const addTextTrack = vi.spyOn(video, 'addTextTrack').mockReturnValue(native);
+    vi.stubGlobal(
+      'VTTCue',
+      class {
+        constructor(
+          public startTime: number,
+          public endTime: number,
+          public text: string,
+        ) {}
+      },
+    );
+    renderer.setTargetLanguage('en');
+    renderer.setCues([{ id: 1, startTime: 1, endTime: 4, text: 'Hello' }]);
+    Object.defineProperty(document, 'fullscreenElement', { value: video, configurable: true });
+    document.dispatchEvent(new Event('fullscreenchange'));
+    expect(addTextTrack).toHaveBeenCalledWith('subtitles', 'English · WebSub', 'en');
+    renderer.destroy();
+    vi.unstubAllGlobals();
+  });
   it('renders currentTime, seeking, offset and pause; clears and destroys', () => {
     const { renderer, video, root } = fixture();
     renderer.setCues([

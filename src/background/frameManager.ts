@@ -99,6 +99,7 @@ export async function applyCues(
   display: DisplaySettings,
   offset: number,
   epoch: number,
+  targetLanguage?: string,
 ) {
   const frames = await videoFrames(tabId);
   if (!frames.length)
@@ -110,7 +111,14 @@ export async function applyCues(
     frames.map((f) =>
       sendTabMessageSafe(
         tabId,
-        { type: 'APPLY', cues, display, offset, epoch },
+        {
+          type: 'APPLY',
+          cues,
+          display,
+          offset,
+          epoch,
+          ...(targetLanguage ? { targetLanguage } : {}),
+        },
         { frameId: f.frameId, ...(f.documentId ? { documentId: f.documentId } : {}) },
       ),
     ),

@@ -5,6 +5,11 @@ import type { SubtitleCue } from './SubtitleCue';
 import type { SubtitleSearchResult, SubtitleProvider } from '../providers/SubtitleProvider';
 import { TranslationQueue, type TranslationBufferStatus } from '../translation/TranslationQueue';
 import { createTranslationProvider } from '../translation/createTranslationProvider';
+import {
+  languageLabel,
+  normalizeTargetLanguage,
+  sameBaseLanguage,
+} from '../translation/languages';
 import { AppError } from '../utils/errors';
 import { SubtitlePipeline, type Mode, type PipelineResult } from './SubtitlePipeline';
 export { SelectionRequired } from './SubtitleSelection';
@@ -23,7 +28,7 @@ export interface ProgressiveHooks {
   onSource?: (result: PipelineResult) => void | Promise<void>;
   onStart: (
     cues: SubtitleCue[],
-    language: 'ja' | 'en',
+    language: 'ko' | 'ja' | 'en',
     queue: TranslationQueue,
   ) => void | Promise<void>;
   onChunk: (cues: SubtitleCue[], snapshot: TranslationBufferStatus) => void | Promise<void>;
@@ -38,7 +43,7 @@ export class SubtitleCore {
     protected embedded?: () => Promise<SubtitleSource[]>,
     protected progressive?: ProgressiveHooks,
   ) {}
-  protected async translate(cues: SubtitleCue[], c: AnimeContext, language: 'ja' | 'en') {
+  protected async translate(cues: SubtitleCue[], c: AnimeContext, language: 'ko' | 'ja' | 'en') {
     this.signal.throwIfAborted();
     if (
       this.settings.translation.provider === 'gemini'
@@ -52,6 +57,8 @@ export class SubtitleCore {
       );
     const provider = createTranslationProvider(this.settings.translation);
     const queue = new TranslationQueue(provider, this.settings.translation);
+    const targetLanguage = normalizeTargetLanguage(this.settings.targetLanguage);
+    const targetLabel = languageLabel(targetLanguage);
     await this.progressive?.onStart(cues, language, queue);
     this.signal.throwIfAborted();
     const engine = provider.id === 'gemini' ? 'Gemini' : 'Local LLM';
@@ -68,8 +75,10 @@ export class SubtitleCore {
           this.status({
             stage: 'translate',
             message:
-              (language === 'ja' ? '일본어' : '영어') +
-              ' → 한국어 번역 중 ' +
+              languageLabel(language) +
+              ' → ' +
+              targetLabel +
+              ' 번역 중 ' +
               snapshot.completedChunks +
               ' / ' +
               snapshot.totalChunks,
@@ -79,7 +88,11 @@ export class SubtitleCore {
                 ? 'Embedded English'
                 : this.source === 'jimaku'
                   ? 'Jimaku'
-                  : 'Kitsunekko') +
+                  : this.source === 'kitsunekko'
+                    ? 'Kitsunekko'
+                    : this.source === 'anissia'
+                      ? 'Anissia'
+                      : 'Web Search (KO)') +
               ' → ' +
               engine,
             source: this.source,
@@ -88,6 +101,7 @@ export class SubtitleCore {
       },
       this.signal,
       this.source,
+      targetLanguage,
     );
   }
   async run(
@@ -109,12 +123,28 @@ export class SubtitleCore {
     this.source = result.source;
     await this.progressive?.onSource?.(result);
     this.signal.throwIfAborted();
-    if (result.language === 'ko') {
+    const targetLanguage = normalizeTargetLanguage(this.settings.targetLanguage);
+    if (sameBaseLanguage(result.language, targetLanguage)) {
+      const path =
+        result.source === 'web-ko'
+          ? 'Web Search (KO)'
+          : result.source === 'anissia'
+            ? 'Anissia'
+            : result.source === 'embedded-en'
+              ? 'Embedded English'
+              : result.source === 'jimaku'
+                ? 'Jimaku'
+                : 'Kitsunekko';
+      const message =
+        result.language === 'ko'
+          ? result.source === 'web-ko'
+            ? '웹 한국어 자막 사용 중'
+            : 'Anissia 한국어 자막 사용 중'
+          : `${languageLabel(targetLanguage)} 자막 사용 중`;
       this.status({
         stage: 'source',
-        message:
-          result.source === 'web-ko' ? '웹 한국어 자막 사용 중' : 'Anissia 한국어 자막 사용 중',
-        path: result.source === 'web-ko' ? 'Web Search (KO)' : 'Anissia',
+        message,
+        path,
         source: result.source,
       });
       return result.cues;

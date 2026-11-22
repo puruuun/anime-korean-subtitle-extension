@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { defaultSettings, type Settings } from '../../storage/settings';
+import { TARGET_LANGUAGES } from '../../translation/languages';
 import { send, requestHost } from '../api';
 import { ExtensionUpdates } from './ExtensionUpdates';
 import { detectBrowserFamily, openExtensionManager } from '../../platform/browser';
@@ -65,6 +66,19 @@ function SettingsPage() {
             수동
           </label>
         </div>
+        <label>
+          목표 자막 언어 (Target Language)
+          <select
+            value={s.targetLanguage}
+            onChange={(e) => setS({ ...s, targetLanguage: e.target.value })}
+          >
+            {TARGET_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.label} ({lang.englishName})
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="check">
           <input
             type="checkbox"

@@ -21,6 +21,7 @@ if (!window.__animeSubIsolatedV1) {
     cues: SubtitleCue[] = [],
     japaneseCues: SubtitleCue[] = [],
     display: DisplaySettings | undefined,
+    targetLanguage = 'ko',
     offset = 0,
     epoch = 0,
     clearRevision = 0,
@@ -104,6 +105,7 @@ if (!window.__animeSubIsolatedV1) {
     return true;
   }
   function configureRenderer() {
+    renderer?.setTargetLanguage(targetLanguage);
     renderer?.setCues(cues);
     renderer?.setJapaneseCues(japaneseCues);
     renderer?.setOffset(offset);
@@ -279,6 +281,7 @@ if (!window.__animeSubIsolatedV1) {
       }
       if (Array.isArray(m.japaneseCues)) japaneseCues = [...m.japaneseCues];
       display = m.display ?? display;
+      if (typeof m.targetLanguage === 'string') targetLanguage = m.targetLanguage;
       offset = m.offset ?? offset;
       if (typeof m.immediatePlayback === 'boolean') immediatePlayback = m.immediatePlayback;
       if (m.bootstrapReady) finishPreparation(true);
@@ -287,6 +290,7 @@ if (!window.__animeSubIsolatedV1) {
           reply({ ok: false });
           return;
         }
+        renderer?.setTargetLanguage(targetLanguage);
         if (m.type === 'APPEND') renderer?.addCues(m.cues);
         else renderer?.setCues(cues);
         renderer?.setJapaneseCues(japaneseCues);
@@ -328,6 +332,10 @@ if (!window.__animeSubIsolatedV1) {
         return;
       }
       display = m.display;
+      if (typeof m.targetLanguage === 'string') {
+        targetLanguage = m.targetLanguage;
+        renderer?.setTargetLanguage(targetLanguage);
+      }
       if (display) renderer?.setDisplay(display);
       reply({ ok: true });
     }

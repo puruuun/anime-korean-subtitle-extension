@@ -41,7 +41,7 @@ export interface Job {
   primaryFrame: number;
   primaryDocument?: string;
   playbackTime: number;
-  sourceLanguage?: 'ja' | 'en';
+  sourceLanguage?: 'ko' | 'ja' | 'en';
   bootstrapReady: boolean;
   writes: Promise<void>;
   cacheKey: string;
@@ -74,6 +74,7 @@ export function renderSnapshot(j: Job) {
     originalCues: j.originalCues,
     cacheKey: j.cacheKey,
     display: j.settings.display,
+    targetLanguage: j.settings.targetLanguage,
     offset: j.status.offset,
     epoch: j.status.epoch,
     contextKey: contextKey(j.status.context),
