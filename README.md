@@ -22,12 +22,12 @@
 
 [Releases](https://github.com/puruuun/web-video-subtitle-extension/releases)에서 사용 환경에 맞는 패키지를 내려받습니다.
 
-| 플랫폼 | 파일명 (`v0.5.6`) | 권한 프로필 | 추천 대상 |
+| 플랫폼 | 파일명 (`v0.5.7`) | 권한 프로필 | 추천 대상 |
 | :--- | :--- | :--- | :--- |
-| **Chrome / Android Chromium** | `web-video-subtitle-chrome-v0.5.6.zip` | 개인용 (`<all_urls>`) | 재생 중 추가 권한 요청 없이 바로 사용 *(권장)* |
-| **Chrome / Android Chromium** | `web-video-subtitle-chrome-public-v0.5.6.zip` | 공개용 (선언 호스트) | 최소 권한으로 필요한 도메인만 수동 승인 |
-| **Firefox (Desktop / Android)** | `web-video-subtitle-firefox-v0.5.6.xpi` | 개인용 / 공개용 | Firefox Desktop · Nightly/Fennec Android |
-| **iOS Safari** | `WebVideoSubtitle-ios-v0.5.6-unsigned.ipa` | 개인용 / 공개용 | SideStore / AltStore / Sideloadly로 설치 후 Safari 확장 활성화 |
+| **Chrome / Android Chromium** | `web-video-subtitle-chrome-v0.5.7.zip` | 개인용 (`<all_urls>`) | 재생 중 추가 권한 요청 없이 바로 사용 *(권장)* |
+| **Chrome / Android Chromium** | `web-video-subtitle-chrome-public-v0.5.7.zip` | 공개용 (선언 호스트) | 최소 권한으로 필요한 도메인만 수동 승인 |
+| **Firefox (Desktop / Android)** | `web-video-subtitle-firefox-v0.5.7.xpi` | 개인용 / 공개용 | Firefox Desktop · Nightly/Fennec Android |
+| **iOS Safari** | `WebVideoSubtitle-ios-v0.5.7-unsigned.ipa` | 개인용 / 공개용 | SideStore / AltStore / Sideloadly로 설치 후 Safari 확장 활성화 |
 
 1. ZIP 압축을 해제하고 내부 `extension/manifest.json` 폴더를 확인합니다.
 2. Chrome에서 `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
