@@ -12,6 +12,7 @@
   "host_permissions": [
     "https://*.miruro.to/*",
     "https://reanime.to/*",
+    "https://*.reanime.cz/*",
     "https://api.anissia.net/*",
     "https://graphql.anilist.co/*",
     "http://127.0.0.1/*",
@@ -58,6 +59,7 @@
       "matches": [
         "https://*.miruro.to/*",
         "https://reanime.to/*",
+        "https://*.reanime.cz/*",
         "https://flixcloud.cc/*",
         "https://strm.cx/*"
       ],
@@ -74,6 +76,7 @@
       "matches": [
         "https://*.miruro.to/*",
         "https://reanime.to/*",
+        "https://*.reanime.cz/*",
         "https://flixcloud.cc/*",
         "https://strm.cx/*"
       ],

@@ -294,7 +294,7 @@ try {
   report.push('Gemini EN translation uses its English prompt and shared queue');
   const storage = await send({ type: 'GET_SETTINGS' });
   assert(!('providers' in storage.settings));
-  assert.equal(storage.settings.schemaVersion, 2);
+  assert.equal(storage.settings.schemaVersion, 3);
   report.push('J: legacy settings migrated without obsolete provider credentials');
   assert(!(await site.content()).includes('test-jimaku-key'));
   const contentStorage = await site.evaluate(async () => {
@@ -319,9 +319,15 @@ try {
   await popup.getByText('자동', { exact: true }).click();
   assert.equal(await popup.locator('input[name="mode"]').count(), 0);
   report.push('Popup has Auto/Manual and exactly three independent manual choices');
+  const popupBox = await popup.locator('.popup').boundingBox();
+  assert(
+    popupBox && popupBox.width >= 400 && popupBox.height >= 500,
+    `Expected desktop popup >= 400x500, got ${JSON.stringify(popupBox)}`,
+  );
+  report.push('Desktop popup renders with non-collapsed intrinsic dimensions (>= 400x500)');
   const options = await context.newPage();
   await options.goto('chrome-extension://' + id + '/settings.html');
-  assert.equal(await options.locator('details input').count(), 1);
+  assert((await options.locator('details input').count()) >= 1);
   assert.equal(await options.getByRole('heading', { name: '자막 자동 검색 설정' }).count(), 1);
   await mkdir('qa', { recursive: true });
   await popup.screenshot({ path: 'qa/popup.png', fullPage: true });

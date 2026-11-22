@@ -32,6 +32,8 @@
    - `npm run typecheck` (`tsc --noEmit` 에러 0건)
    - `npm test` (`vitest run` 전체 단위 테스트 통과)
    - `npm run build:personal` 및 `npm run build:public` (두 배포 타겟 모두 빌드 성공)
+   - **실제 브라우저 E2E 게이트 (UI · CSS · Content Script · 렌더러 · 사이트 어댑터 변경 시 필수)**: 코드 읽기만으로 통과 금지. 빌드된 `dist/`로 Playwright 실제 Chromium 회귀 테스트(`npm run test:browser`, `test:browser:auto`, `test:browser:dual`, `test:browser:settings`, `test:browser:progressive`, `node scripts/browser-frames.mjs`)를 모두 통과해야 합니다.
+   - **실사이트 스모크 & 베타 선검증 (배포 전 필수)**: 정식 Release 태그(`vX.Y.Z`)는 바로 발행하지 않고, `node scripts/research-live.mjs`로 Miruro / Re:ANIME 실접속 어댑터 응답(`ok: true`)을 확인한 뒤 **로컬 `dist/` 또는 베타 빌드로 사용자 실사용 테스트를 거친 후에만** 정식 릴리스를 발행합니다.
 5. **PR 및 CI 검증**: 원격 브랜치 푸시 후 `main` 대상 PR을 생성하고 본문에 `Closes #N`을 명시합니다. `.github/workflows/ci.yml` 통과 확인 후 저장소 관리자의 승인을 거쳐 병합합니다.
 6. **작성 규칙**:
    - GitHub Issue, PR, Commit 메시지는 영문(English)으로 작성합니다.

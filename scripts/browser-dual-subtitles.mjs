@@ -368,7 +368,7 @@ try {
         });
         document.dispatchEvent(new Event('fullscreenchange'));
         const result = Array.from(document.querySelector('video').textTracks)
-          .filter((t) => t.label === '한국어 · AnimeSub')
+          .filter((t) => t.label.includes('WebSub') || t.label.includes('AnimeSub'))
           .flatMap((t) => Array.from(t.cues ?? []).map((c) => c.text));
         delete document.fullscreenElement;
         document.dispatchEvent(new Event('fullscreenchange'));
