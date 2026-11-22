@@ -155,7 +155,7 @@ export function ExtensionUpdates() {
           <li>
             Resource owner는 <strong>puruuun</strong>, Repository access는{' '}
             <strong>Only select repositories</strong>로 선택하고{' '}
-            <strong>anime-korean-subtitle-extension</strong>을 지정합니다. 저장소가 목록에 없다면
+            <strong>web-video-subtitle-extension</strong>을 지정합니다. 저장소가 목록에 없다면
             해당 계정의 저장소 접근 권한부터 확인하세요.
           </li>
           <li>

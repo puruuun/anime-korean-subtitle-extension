@@ -23,7 +23,7 @@ const browser = await chromium.launchPersistentContext(join(temp, 'profile'), {
 });
 try {
   await browser.route(
-    'https://api.github.com/repos/puruuun/anime-korean-subtitle-extension/releases/latest',
+    'https://api.github.com/repos/puruuun/web-video-subtitle-extension/releases/latest',
     async (route) => {
       const authorization = route.request().headers().authorization;
       requests.push({ phase, authenticated: !!authorization });
@@ -154,7 +154,7 @@ try {
   assert((await page.locator('.extension-updates').innerText()).includes('새 버전 설치 방법'));
   assert.equal(
     await page.getByRole('link', { name: 'GitHub Release 열기 ↗' }).getAttribute('href'),
-    'https://github.com/puruuun/anime-korean-subtitle-extension/releases/tag/v' + nextVersion,
+    'https://github.com/puruuun/web-video-subtitle-extension/releases/tag/v' + nextVersion,
   );
   tests.push(
     'Newer numeric version displays update needed, download link and folder-preserving installation steps',

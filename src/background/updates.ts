@@ -1,5 +1,5 @@
 import { AppError } from '../utils/errors';
-const REPOSITORY = 'puruuun/anime-korean-subtitle-extension';
+const REPOSITORY = 'puruuun/web-video-subtitle-extension';
 export const RELEASES_URL = `https://github.com/${REPOSITORY}/releases`;
 export const LATEST_RELEASE_API = `https://api.github.com/repos/${REPOSITORY}/releases/latest`;
 const TOKEN_KEY = 'githubUpdateToken';
