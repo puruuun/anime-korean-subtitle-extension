@@ -18,7 +18,10 @@ for (const [name, entry] of [
     },
   });
 }
-const target = process.env.ANIMESUB_BUILD_TARGET ?? 'personal';
+const targetArg = process.argv.find((arg) => arg.startsWith('--target='));
+const target = targetArg
+  ? targetArg.slice('--target='.length)
+  : (process.env.ANIMESUB_BUILD_TARGET ?? 'personal');
 await writeFile(
   'dist/manifest.json',
   JSON.stringify(
