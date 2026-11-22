@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { AnimeContext } from '../../anime/AnimeContext';
+import { stableOriginPath, type AnimeContext } from '../../anime/AnimeContext';
 import type { JobStatus } from '../../background/messageRouter';
+import { isSpecializedSite, isWebVideoUrl } from '../../sites/adapter';
+import type { Settings } from '../../storage/settings';
 import type { Mode } from '../../subtitle/SubtitleCore';
 import type { TranslationBufferStatus } from '../../translation/TranslationQueue';
-import { send } from '../api';
+import { requestHost, send } from '../api';
 import { workElapsedSeconds, workPending } from '../../background/jobClock';
 import { detectBrowserFamily, openExtensionManager } from '../../platform/browser';
 import { getPermissionGuideCopy } from '../permissionGuide';
@@ -115,6 +117,12 @@ function Popup() {
   const [offset, setOffset] = useState(0);
   const [showJapanese, setShowJapanese] = useState(false);
   const [changingJapanese, setChangingJapanese] = useState(false);
+  const [isGenericSite, setIsGenericSite] = useState(false);
+  const [genericUrl, setGenericUrl] = useState('');
+  const [genericHost, setGenericHost] = useState('');
+  const [genericActive, setGenericActive] = useState(false);
+  const [autoHostEnabled, setAutoHostEnabled] = useState(false);
+  const [togglingAutoHost, setTogglingAutoHost] = useState(false);
   const japanesePending = useRef(false);
   const japaneseRevision = useRef(0);
   const personal = Boolean(chrome.runtime.getManifest().host_permissions?.includes('<all_urls>'));
@@ -125,7 +133,7 @@ function Popup() {
     setEpisode(String(c.episode));
     setSeason(c.season ? String(c.season) : '');
   }
-  async function refresh(id: number, full = false) {
+  async function refresh(id: number, full = false, checkAccess = true) {
     const r = await send<{ status?: JobStatus }>({ type: 'GET_STATUS', tabId: id });
     setStatus(r.status);
     if (full) {
@@ -136,10 +144,13 @@ function Popup() {
       setMode(preferences.mode);
       if (!japanesePending.current && revision === japaneseRevision.current)
         setShowJapanese(preferences.showJapanese);
-      const access = await send<{ missing: string[] }>({ type: 'ACCESS_STATUS', tabId: id }).catch(
-        () => ({ missing: [] }),
-      );
-      setMissingOrigins(access.missing);
+      if (checkAccess) {
+        const access = await send<{ missing: string[] }>({
+          type: 'ACCESS_STATUS',
+          tabId: id,
+        }).catch(() => ({ missing: [] }));
+        setMissingOrigins(access.missing);
+      }
     }
     if (r.status) {
       setOffset(r.status.offset ?? 0);
@@ -154,26 +165,54 @@ function Popup() {
         const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!t.id) throw Error('활성 탭이 없습니다.');
         setTabId(t.id);
-        const preferences = await send<{ mode: Mode }>({ type: 'GET_PREFERENCES' });
-        setMode(preferences.mode);
-        const contextResult = await chrome.tabs
-          .sendMessage(t.id, { type: 'CONTEXT' }, { frameId: 0 })
-          .catch(() => null);
-        if (contextResult?.ok) acceptContext(contextResult.context);
-        else {
-          setEdit(preferences.mode !== 'auto');
-          setContext({
-            site: (t.url ?? '').includes('reanime.to') ? 'reanime' : 'miruro',
-            title: '',
-            episode: 0,
-            pageUrl: t.url ?? '',
-          });
-          setError(
-            contextResult?.error ??
-              '영상 페이지를 새로고침하세요. 연결되지 않으면 Chrome 확장 세부정보의 사이트 접근을 확인하세요.',
-          );
+        const tabUrl = t.url ?? '';
+        const generic = isWebVideoUrl(tabUrl) && !isSpecializedSite(tabUrl);
+        setIsGenericSite(generic);
+        if (generic) {
+          const host = new URL(tabUrl).hostname.toLowerCase();
+          setGenericUrl(tabUrl);
+          setGenericHost(host);
+          const { settings } = await send<{ settings: Settings }>({ type: 'GET_SETTINGS' });
+          setAutoHostEnabled(settings.allowedGenericHosts.includes(host));
+          const contextResult = await chrome.tabs
+            .sendMessage(t.id, { type: 'CONTEXT' }, { frameId: 0 })
+            .catch(() => null);
+          if (contextResult?.ok) {
+            setGenericActive(true);
+            acceptContext(contextResult.context);
+          } else {
+            setGenericActive(false);
+            acceptContext({
+              site: 'generic',
+              animeId: stableOriginPath(tabUrl),
+              title: (t.title || host).trim(),
+              episode: 1,
+              pageUrl: tabUrl,
+            });
+          }
+          await refresh(t.id, true, Boolean(contextResult?.ok));
+        } else {
+          const preferences = await send<{ mode: Mode }>({ type: 'GET_PREFERENCES' });
+          setMode(preferences.mode);
+          const contextResult = await chrome.tabs
+            .sendMessage(t.id, { type: 'CONTEXT' }, { frameId: 0 })
+            .catch(() => null);
+          if (contextResult?.ok) acceptContext(contextResult.context);
+          else {
+            setEdit(preferences.mode !== 'auto');
+            setContext({
+              site: tabUrl.includes('reanime.to') ? 'reanime' : 'miruro',
+              title: '',
+              episode: 0,
+              pageUrl: tabUrl,
+            });
+            setError(
+              contextResult?.error ??
+                '영상 페이지를 새로고침하세요. 연결되지 않으면 Chrome 확장 세부정보의 사이트 접근을 확인하세요.',
+            );
+          }
+          await refresh(t.id, true);
         }
-        await refresh(t.id, true);
         timer = setInterval(() => {
           if (!stopped) void refresh(t.id!, false).catch(() => {});
         }, 1000);
@@ -256,6 +295,57 @@ function Popup() {
     }
   }
   const busy = working || !!status?.busy;
+  async function runGeneric() {
+    if (tabId === undefined || !genericUrl) return;
+    setError('');
+    setWorking(true);
+    setStatus((previous) =>
+      previous
+        ? { ...previous, busy: true, stage: 'context', message: '웹 영상 자막을 준비하는 중...' }
+        : undefined,
+    );
+    try {
+      await requestHost(genericUrl);
+      await send({ type: 'ACTIVATE_GENERIC_TAB', tabId });
+      setGenericActive(true);
+      const contextResult = await chrome.tabs
+        .sendMessage(tabId, { type: 'CONTEXT' }, { frameId: 0 })
+        .catch(() => null);
+      const nextContext = contextResult?.ok ? (contextResult.context as AnimeContext) : context;
+      if (nextContext) acceptContext(nextContext);
+      const r = await send<{ status: JobStatus }>({
+        type: 'RUN',
+        tabId,
+        mode: 'auto',
+        context: nextContext,
+        refresh: !status?.translation?.failedChunks,
+      });
+      setStatus(r.status);
+      await refresh(tabId, true, true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setWorking(false);
+    }
+  }
+  async function toggleAutoHost(enabled: boolean) {
+    if (!genericHost || !genericUrl) return;
+    setError('');
+    setTogglingAutoHost(true);
+    try {
+      if (enabled) await requestHost(genericUrl);
+      const r = await send<{ allowedGenericHosts: string[] }>({
+        type: 'TOGGLE_GENERIC_AUTO_HOST',
+        host: genericHost,
+        enabled,
+      });
+      setAutoHostEnabled(r.allowedGenericHosts.includes(genericHost));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTogglingAutoHost(false);
+    }
+  }
   async function changeJapanese(enabled: boolean) {
     const previous = showJapanese;
     japanesePending.current = true;
@@ -279,13 +369,17 @@ function Popup() {
     <main className="popup">
       <section className="work-status" role="status" aria-live="polite" aria-label="현재 작업 상태">
         <div className="row work-heading">
-          <strong>자막: {mode === 'auto' ? '자동' : '수동'}</strong>
-          <button
-            className="text-button"
-            onClick={() => void changeMode(mode === 'auto' ? 'ko' : 'auto')}
-          >
-            {mode === 'auto' ? '수동 전환' : '자동 전환'}
-          </button>
+          <strong>
+            {isGenericSite ? '일반 웹 영상' : `자막: ${mode === 'auto' ? '자동' : '수동'}`}
+          </strong>
+          {!isGenericSite && (
+            <button
+              className="text-button"
+              onClick={() => void changeMode(mode === 'auto' ? 'ko' : 'auto')}
+            >
+              {mode === 'auto' ? '수동 전환' : '자동 전환'}
+            </button>
+          )}
           <button
             className="icon"
             onClick={() => chrome.runtime.openOptionsPage()}
@@ -296,7 +390,7 @@ function Popup() {
         </div>
         <p className="current-episode">
           {context?.title || '영상 페이지를 기다리고 있습니다.'}
-          {context?.episode ? ' · EP ' + context.episode : ''}
+          {!isGenericSite && context?.episode ? ' · EP ' + context.episode : ''}
         </p>
         <p
           className={
@@ -314,9 +408,11 @@ function Popup() {
             (missingOrigins.length
               ? '사이트 접근이 차단되었습니다. Chrome 확장 세부정보에서 사이트 접근을 허용한 뒤 새로고침하세요.'
               : status?.message) ||
-            (mode === 'auto'
-              ? '회차를 선택하면 자막을 자동으로 준비합니다.'
-              : '사용할 자막 경로를 선택하세요.')}
+            (isGenericSite
+              ? '아래 버튼을 눌러 이 페이지의 내장 자막을 찾거나 번역하세요.'
+              : mode === 'auto'
+                ? '회차를 선택하면 자막을 자동으로 준비합니다.'
+                : '사용할 자막 경로를 선택하세요.')}
         </p>
         {status?.path && (
           <small className="work-source">
@@ -385,7 +481,91 @@ function Popup() {
           </dl>
         )}
       </section>
-      <div className="popup-body">
+      {isGenericSite ? (
+        <div className="popup-body">
+          <section className="anime">
+            <div className="row">
+              <span className="badge">일반 웹 영상</span>
+              <small className="muted">{genericHost}</small>
+            </div>
+            <h2>{context?.title || genericHost}</h2>
+          </section>
+          <button
+            className="secondary full"
+            disabled={busy || tabId === undefined}
+            onClick={() => void runGeneric()}
+          >
+            이 페이지에서 자막 찾기 / 번역
+          </button>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={autoHostEnabled}
+              disabled={togglingAutoHost || !genericHost}
+              onChange={(e) => void toggleAutoHost(e.target.checked)}
+            />
+            이 사이트에서 항상 자동 적용
+          </label>
+          <section className="sync">
+            <div className="row">
+              <strong>자막 싱크</strong>
+              <span className="muted">
+                {offset > 0 ? '+' : ''}
+                {offset.toFixed(1)}s
+              </span>
+            </div>
+            <div className="toolbar">
+              <button
+                className="secondary"
+                onClick={() => void adjust(offset - 0.5)}
+                disabled={!status}
+              >
+                −0.5s
+              </button>
+              <button className="secondary" onClick={() => void adjust(0)} disabled={!status}>
+                Reset
+              </button>
+              <button
+                className="secondary"
+                onClick={() => void adjust(offset + 0.5)}
+                disabled={!status}
+              >
+                +0.5s
+              </button>
+            </div>
+            <small>양수 값은 자막을 앞당깁니다. 페이지별로 저장됩니다.</small>
+            <small>단축키: Alt+[ / Alt+] (±0.5s) · Alt+\ (Reset)</small>
+          </section>
+          {(genericActive || status) && (
+            <div className="toolbar">
+              <button
+                className="text-button"
+                onClick={() => {
+                  void send({ type: 'CANCEL', tabId }).then(
+                    () => {
+                      setStatus(undefined);
+                    },
+                    (e) => setError(e.message),
+                  );
+                }}
+              >
+                자막 끄기 / 취소
+              </button>
+              <button
+                className="text-button"
+                onClick={() => {
+                  void chrome.tabs
+                    .sendMessage(tabId!, { type: 'DEMO' })
+                    .catch((e) => setError(e.message));
+                }}
+              >
+                렌더러 테스트
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="popup-body">
         <section className="additional-subtitle">
           <label className="check">
             <input
@@ -608,6 +788,7 @@ function Popup() {
         </div>
         <p className="muted footer">다음 회차 자동 감지 · 실패 재시도 최대 2분</p>
       </div>
+      )}
     </main>
   );
 }

@@ -13,12 +13,33 @@ import { withDeadline } from '../utils/deadline';
 import { AppError } from '../utils/errors';
 import { log } from '../utils/logger';
 import { normalizeEpisode } from '../anime/episodeNormalizer';
-import { sameBaseLanguage } from '../translation/languages';
+import {
+  languageLabel,
+  normalizeTargetLanguage,
+  sameBaseLanguage,
+} from '../translation/languages';
 export type Mode = Settings['mode'];
 export interface PipelineResult {
   cues: SubtitleCue[];
-  language: 'ko' | 'ja' | 'en';
+  language: string;
   source: string;
+}
+function normalizeGenericLanguage(language?: string): string {
+  const trimmed = (language ?? '').trim();
+  if (!trimmed) return 'und';
+  if (/^(?:en(?:[-_].*)?|eng|english(?:\b.*)?)$/i.test(trimmed)) return 'en';
+  if (/^(?:ja(?:[-_].*)?|jpn|japanese|日本語(?:\b.*)?)$/i.test(trimmed)) return 'ja';
+  if (/^(?:ko(?:[-_].*)?|kor|korean|한국어(?:\b.*)?)$/i.test(trimmed)) return 'ko';
+  const cleaned = trimmed.replace(/_/g, '-');
+  return /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,4})?$/i.test(cleaned)
+    ? normalizeTargetLanguage(cleaned)
+    : trimmed;
+}
+function rankGenericSource(language: string, targetLanguage: string): number {
+  if (sameBaseLanguage(language, targetLanguage)) return 0;
+  if (sameBaseLanguage(language, 'en')) return 1;
+  if (sameBaseLanguage(language, 'ja')) return 2;
+  return 3;
 }
 export class SubtitlePipeline {
   private blockedOrigins = new Set<string>();
@@ -278,6 +299,49 @@ export class SubtitlePipeline {
       return undefined;
     }
   }
+  private async genericEmbedded(targetLanguage: string): Promise<PipelineResult | undefined> {
+    const normalizedTarget = normalizeTargetLanguage(targetLanguage);
+    this.status({
+      stage: 'extract',
+      message: '웹 영상 내장 자막을 읽는 중...',
+      path: 'Embedded Video',
+    });
+    try {
+      return await withDeadline(this.signal, 10000, async (signal) => {
+        const sources = [...(await this.embedded?.() ?? [])].sort(
+          (a, b) =>
+            rankGenericSource(normalizeGenericLanguage(a.language), normalizedTarget) -
+            rankGenericSource(normalizeGenericLanguage(b.language), normalizedTarget),
+        );
+        signal.throwIfAborted();
+        for (const source of sources) {
+          const normalizedLang = normalizeGenericLanguage(source.language);
+          try {
+            const cues = await loadEmbeddedSource(source, signal);
+            if (!cues.length) continue;
+            this.status({
+              stage: 'source',
+              message: sameBaseLanguage(normalizedLang, normalizedTarget)
+                ? `${languageLabel(normalizedTarget)} 내장 자막 사용 중`
+                : '웹 영상 내장 자막 사용 · 번역 준비 중',
+              source: 'embedded-generic',
+            });
+            return { cues, language: normalizedLang || 'und', source: 'embedded-generic' };
+          } catch (error) {
+            signal.throwIfAborted();
+            log('EmbeddedGeneric', {
+              unavailable: error instanceof Error ? error.message : 'unknown',
+            });
+          }
+        }
+        return undefined;
+      });
+    } catch (error) {
+      this.signal.throwIfAborted();
+      log('EmbeddedGeneric', { unavailable: error instanceof Error ? error.message : 'unknown' });
+      return undefined;
+    }
+  }
   async resolve(
     c: AnimeContext,
     mode: Mode,
@@ -285,6 +349,11 @@ export class SubtitlePipeline {
   ): Promise<PipelineResult> {
     this.signal.throwIfAborted();
     log('SubtitlePipeline', { mode, anime: c.title, episode: c.episode });
+    if (c.site === 'generic') {
+      const generic = await this.genericEmbedded(this.settings.targetLanguage || 'ko');
+      if (generic) return generic;
+      throw new AppError('NOT_FOUND', '이 영상에서 사용 가능한 내장 자막을 찾지 못했습니다.');
+    }
     if (mode !== 'auto') {
       const result =
         mode === 'ko'

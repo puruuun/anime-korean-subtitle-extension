@@ -41,7 +41,7 @@ export interface Job {
   primaryFrame: number;
   primaryDocument?: string;
   playbackTime: number;
-  sourceLanguage?: 'ko' | 'ja' | 'en';
+  sourceLanguage?: string;
   bootstrapReady: boolean;
   writes: Promise<void>;
   cacheKey: string;

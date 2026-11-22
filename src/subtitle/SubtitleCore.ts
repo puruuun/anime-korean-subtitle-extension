@@ -28,7 +28,7 @@ export interface ProgressiveHooks {
   onSource?: (result: PipelineResult) => void | Promise<void>;
   onStart: (
     cues: SubtitleCue[],
-    language: 'ko' | 'ja' | 'en',
+    language: string,
     queue: TranslationQueue,
   ) => void | Promise<void>;
   onChunk: (cues: SubtitleCue[], snapshot: TranslationBufferStatus) => void | Promise<void>;
@@ -43,7 +43,7 @@ export class SubtitleCore {
     protected embedded?: () => Promise<SubtitleSource[]>,
     protected progressive?: ProgressiveHooks,
   ) {}
-  protected async translate(cues: SubtitleCue[], c: AnimeContext, language: 'ko' | 'ja' | 'en') {
+  protected async translate(cues: SubtitleCue[], c: AnimeContext, language: string) {
     this.signal.throwIfAborted();
     if (
       this.settings.translation.provider === 'gemini'
@@ -62,6 +62,7 @@ export class SubtitleCore {
     await this.progressive?.onStart(cues, language, queue);
     this.signal.throwIfAborted();
     const engine = provider.id === 'gemini' ? 'Gemini' : 'Local LLM';
+    const contentKind = c.site === 'generic' ? 'general' : 'anime';
     return queue.run(
       cues,
       c,
@@ -84,15 +85,17 @@ export class SubtitleCore {
               snapshot.totalChunks,
             progress: { done: snapshot.completedChunks, total: snapshot.totalChunks },
             path:
-              (this.source === 'embedded-en'
-                ? 'Embedded English'
-                : this.source === 'jimaku'
-                  ? 'Jimaku'
-                  : this.source === 'kitsunekko'
-                    ? 'Kitsunekko'
-                    : this.source === 'anissia'
-                      ? 'Anissia'
-                      : 'Web Search (KO)') +
+              (this.source === 'embedded-generic'
+                ? 'Embedded Video'
+                : this.source === 'embedded-en'
+                  ? 'Embedded English'
+                  : this.source === 'jimaku'
+                    ? 'Jimaku'
+                    : this.source === 'kitsunekko'
+                      ? 'Kitsunekko'
+                      : this.source === 'anissia'
+                        ? 'Anissia'
+                        : 'Web Search (KO)') +
               ' → ' +
               engine,
             source: this.source,
@@ -102,6 +105,7 @@ export class SubtitleCore {
       this.signal,
       this.source,
       targetLanguage,
+      contentKind,
     );
   }
   async run(
@@ -126,20 +130,24 @@ export class SubtitleCore {
     const targetLanguage = normalizeTargetLanguage(this.settings.targetLanguage);
     if (sameBaseLanguage(result.language, targetLanguage)) {
       const path =
-        result.source === 'web-ko'
-          ? 'Web Search (KO)'
-          : result.source === 'anissia'
-            ? 'Anissia'
-            : result.source === 'embedded-en'
-              ? 'Embedded English'
-              : result.source === 'jimaku'
-                ? 'Jimaku'
-                : 'Kitsunekko';
+        result.source === 'embedded-generic'
+          ? 'Embedded Video'
+          : result.source === 'web-ko'
+            ? 'Web Search (KO)'
+            : result.source === 'anissia'
+              ? 'Anissia'
+              : result.source === 'embedded-en'
+                ? 'Embedded English'
+                : result.source === 'jimaku'
+                  ? 'Jimaku'
+                  : 'Kitsunekko';
       const message =
         result.language === 'ko'
           ? result.source === 'web-ko'
             ? '웹 한국어 자막 사용 중'
-            : 'Anissia 한국어 자막 사용 중'
+            : result.source === 'embedded-generic'
+              ? '웹 영상 한국어 내장 자막 사용 중'
+              : 'Anissia 한국어 자막 사용 중'
           : `${languageLabel(targetLanguage)} 자막 사용 중`;
       this.status({
         stage: 'source',

@@ -1,6 +1,8 @@
 import type { SubtitleSource } from '../sites/types';
 import type { SubtitleCue } from '../subtitle/SubtitleCue';
 import type { DisplaySettings } from '../subtitle/SubtitleRenderer';
+import { isSpecializedSite, isWebVideoUrl } from '../sites/adapter';
+import { getSettings } from '../storage/settings';
 import { AppError } from '../utils/errors';
 import { sendTabMessageSafe } from '../platform/browser';
 export interface FrameInfo {
@@ -13,16 +15,24 @@ export interface FrameInfo {
   playerRevision?: number;
 }
 const available = new Map<number, Map<number, FrameInfo>>();
+const activeGenericTabs = new Set<number>();
 export function supportedSite(url?: string) {
+  return isSpecializedSite(url);
+}
+export function isGenericTabActive(tabId: number): boolean {
+  return activeGenericTabs.has(tabId);
+}
+export async function supportedTab(tabId: number) {
+  const url = (await chrome.tabs.get(tabId)).url;
+  if (supportedSite(url)) return true;
+  if (!isWebVideoUrl(url)) return false;
+  if (activeGenericTabs.has(tabId)) return true;
   try {
-    const h = new URL(url ?? '').hostname;
-    return /(^|\.)miruro\.to$/.test(h) || h === 'reanime.to';
+    const host = new URL(url!).hostname.toLowerCase();
+    return (await getSettings()).allowedGenericHosts.includes(host);
   } catch {
     return false;
   }
-}
-export async function supportedTab(tabId: number) {
-  return supportedSite((await chrome.tabs.get(tabId)).url);
 }
 export async function recordFrame(
   sender: chrome.runtime.MessageSender,
@@ -81,11 +91,15 @@ export async function videoFrames(tabId: number) {
       ]
     : [];
 }
-export async function collectSubtitles(tabId: number): Promise<SubtitleSource[]> {
+export async function collectSubtitles(
+  tabId: number,
+  language?: string,
+): Promise<SubtitleSource[]> {
   const videos = await videoFrames(tabId);
   const frames = [...new Set([...videos.map((f) => f.frameId), 0])];
+  const message = { type: 'SOURCES', ...(language ? { language } : {}) };
   const results = await Promise.allSettled(
-    frames.map((frameId) => chrome.tabs.sendMessage(tabId, { type: 'SOURCES' }, { frameId })),
+    frames.map((frameId) => chrome.tabs.sendMessage(tabId, message, { frameId })),
   );
   const sources: SubtitleSource[] = [];
   for (const r of results)
@@ -170,10 +184,22 @@ export async function injectFrames(tabId: number) {
     frames.filter((f) => f.frameId !== 0).map((f) => injectFrame(tabId, f.frameId)),
   );
 }
+export async function activateGenericTab(tabId: number): Promise<void> {
+  const tab = await chrome.tabs.get(tabId);
+  if (!isWebVideoUrl(tab.url)) {
+    throw new AppError('SITE', 'HTTP/HTTPS 웹 페이지에서만 사용할 수 있습니다.');
+  }
+  activeGenericTabs.add(tabId);
+  const frames = await chrome.webNavigation?.getAllFrames?.({ tabId }).catch(() => null);
+  const frameIds = frames?.length ? [...new Set([0, ...frames.map((f) => f.frameId)])] : [0];
+  await Promise.allSettled(frameIds.map((frameId) => injectFrame(tabId, frameId)));
+}
 chrome.webNavigation.onCommitted.addListener((d) => {
-  if (d.frameId !== 0) void injectFrame(d.tabId, d.frameId);
+  if (d.frameId === 0) activeGenericTabs.delete(d.tabId);
+  else void injectFrame(d.tabId, d.frameId);
 });
 export function forgetTabFrames(tabId: number): void {
   available.delete(tabId);
+  activeGenericTabs.delete(tabId);
 }
 chrome.tabs.onRemoved.addListener((id) => forgetTabFrames(id));
