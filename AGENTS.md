@@ -1,13 +1,13 @@
 # AGENTS.md
 
-`anime-korean-subtitle-extension` 저장소의 개발·검증·보안 기준 문서입니다.
+`web-video-subtitle-extension` 저장소의 개발·검증·보안 기준 문서입니다.
 
 ---
 
 ## 1. 프로젝트 개요 및 계층 구조
 
-- **프로젝트**: Anime Korean Subtitle (Chrome Manifest V3 확장프로그램)
-- **기능**: Miruro / Re:ANIME 영상 페이지에서 작품·회차를 감지하고, 한국어 자막(Anissia → 웹 한국어 폴백 검색) 또는 일본어(Jimaku → Kitsunekko)·내장 영어 자막을 확보해 한국어(및 선택적 일본어 원문 동시 자막)를 렌더링합니다.
+- **프로젝트**: Web Video Subtitle Extension (Chrome Manifest V3 확장프로그램)
+- **목적**: 영상 사이트가 원하는 언어의 자막을 지원하지 않을 때, 외부 자막 검색·웹 폴백·점진적 AI 번역을 통해 원하는 언어의 자막(및 선택적 원문 동시 자막)을 영상 위에 오버레이 렌더링합니다. (현재 Miruro / Re:ANIME 한국어 자막 중심 지원, 범용 웹 영상·다국어 확장 진행 중)
 - **디렉토리 계층**:
   - `src/sites/`: 지원 사이트별 작품·회차·내장 자막 감지 어댑터 (`miruro`, `reanime`)
   - `src/anime/`: 작품 메타데이터 정규화·AniList 해석·회차 파싱
