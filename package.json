@@ -16,8 +16,8 @@
     "test:browser:anissia": "node scripts/browser-anissia-live.mjs",
     "test:anissia:distribution": "node scripts/verify-anissia-distribution.mjs",
     "test:browser:distribution": "node scripts/browser-anissia-distribution.mjs",
-    "build:personal": "ANIMESUB_BUILD_TARGET=personal npm run build",
-    "build:public": "ANIMESUB_BUILD_TARGET=public npm run build"
+    "build:personal": "tsc --noEmit && node scripts/build.mjs --target=personal",
+    "build:public": "tsc --noEmit && node scripts/build.mjs --target=public"
   },
   "dependencies": {
     "fflate": "^0.8.2",

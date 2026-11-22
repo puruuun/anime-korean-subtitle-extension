@@ -1,17 +1,17 @@
-# Anime Korean Subtitle v0.5.4
+# Anime Korean Subtitle v0.5.5
 
 Miruro / Re:ANIME의 현재 작품과 회차를 감지하고 한국어 자막을 준비하는 Chrome Manifest V3 확장프로그램입니다. 영상·오디오는 다운로드하거나 전사하지 않습니다.
 
 ## 다른 컴퓨터에 설치
 
-1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.5.4.zip`을 받습니다.
+1. [Releases](https://github.com/puruuun/anime-korean-subtitle-extension/releases)에서 `anime-korean-subtitle-v0.5.5.zip`을 받습니다.
 2. ZIP을 폴더에 압축 해제합니다. 그 폴더의 `extension/manifest.json`을 확인합니다.
 3. Chrome에서 `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
 4. **압축해제된 확장 프로그램 로드**를 눌러 `extension` 폴더를 선택합니다.
 5. 설정에서 **Local LLM** 또는 **Gemini API**를 연결합니다. 한국어 원본 자막에는 번역 서버가 필요 없습니다.
 6. Miruro / Re:ANIME 회차를 열거나 새로고침합니다. 회차 선택만으로 자막 검색·다운로드·번역·적용이 자동 실행됩니다.
 
-기본 ZIP은 **개인용** 빌드입니다. 설치 시 모든 웹사이트 접근 권한(`<all_urls>`)을 사용하며 재생 중 별도의 권한 창을 요청하지 않습니다. 제한된 권한이 필요하면 `anime-korean-subtitle-public-v0.5.4.zip`을 사용하세요. 공개용의 알려지지 않은 배포·플레이어·번역 서버는 재생 전에 설정의 초기 접근 설정에서 한 번 승인합니다. AUTO가 대신 권한 창을 띄우지 않습니다.
+기본 ZIP은 **개인용** 빌드입니다. 설치 시 모든 웹사이트 접근 권한(`<all_urls>`)을 사용하며 재생 중 별도의 권한 창을 요청하지 않습니다. 제한된 권한이 필요하면 `anime-korean-subtitle-public-v0.5.5.zip`을 사용하세요. 공개용의 알려지지 않은 배포·플레이어·번역 서버는 재생 전에 설정의 초기 접근 설정에서 한 번 승인합니다. AUTO가 대신 권한 창을 띄우지 않습니다.
 
 확장 폴더는 설치 후에도 삭제하지 마세요. 업데이트 때는 같은 폴더를 새 버전으로 바꾸고 확장 페이지에서 새로고침하세요. 로그인 정보·개인 API Key는 배포 ZIP에 포함하지 않습니다.
 
@@ -30,14 +30,9 @@ Miruro / Re:ANIME의 현재 작품과 회차를 감지하고 한국어 자막을
 
 설정의 **프로그램 업데이트**에서 설치 버전과 최신 정식 Release를 비교합니다. 설정을 열면 확인하며, 성공 결과는 10분 동안 재사용합니다. **업데이트 확인** 버튼은 캐시를 건너뛰고 다시 조회합니다. **최신 버전 / 업데이트 필요 / 개발 버전 / 확인 실패**를 구분하며 인증·통신 실패를 최신 버전으로 표시하지 않습니다. 실패 결과는 1분간만 캐싱합니다. 같은 시점의 요청은 하나로 합치고 10초 안에 응답하지 않으면 중단합니다.
 
-현재 GitHub 저장소가 **비공개**이므로 업데이트 조회에는 해당 저장소에 접근할 수 있는 본인의 **Fine-grained 읽기 전용 토큰**이 필요합니다. Chrome의 GitHub 로그인만으로 API가 인증되지는 않습니다. 설정의 **비공개 저장소 연결**을 펼치면 생성 링크와 다음 절차가 있습니다.
+현재 저장소는 **공개(Public)** 상태이므로 별도 토큰 없이도 업데이트 확인이 동작합니다. 비공개 포크를 사용하거나 GitHub API 요청 한도를 늘려야 할 때만 설정의 **저장소 토큰 연결**에서 읽기 전용 Fine-grained 토큰(`Contents: Read-only`)을 등록할 수 있습니다.
 
-1. GitHub 토큰 생성 화면에서 이름·만료일을 정합니다.
-2. Resource owner `puruuun`, Only select repositories → `anime-korean-subtitle-extension`을 선택합니다. 목록에 없으면 계정의 저장소 접근 권한을 확인하세요.
-3. Repository permissions에서 **Contents: Read-only**를 선택합니다. Metadata 읽기는 자동 포함됩니다. 쓰기 권한은 필요 없습니다.
-4. 생성한 토큰을 입력하고 **연결하고 확인**을 누릅니다. 연결 해제로 토큰을 제거할 수 있습니다.
-
-토큰은 현재 Chrome 프로필의 확장 local storage에 별도로 저장하며 GitHub API에만 전송합니다. 웹페이지·Content Script 및 일반 설정 응답에 반환하지 않습니다. 저장소가 공개되면 토큰 없이 조회할 수 있습니다. [GitHub 토큰 안내](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens), [Release API 권한 문서](https://docs.github.com/en/rest/releases/releases#get-the-latest-release).
+토큰을 등록한 경우 현재 Chrome 프로필의 확장 local storage에 별도로 저장하며 GitHub API에만 전송합니다. 웹페이지·Content Script 및 일반 설정 응답에는 반환하지 않습니다. [GitHub 토큰 안내](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens), [Release API 권한 문서](https://docs.github.com/en/rest/releases/releases#get-the-latest-release).
 
 새 버전이 있으면 Release 링크와 설치 방법을 표시합니다. 같은 빌드의 ZIP을 받고 기존 설치 폴더를 교체한 다음 Chrome 확장 페이지의 새로고침(↻)과 영상 새로고침을 진행합니다. 업데이트 파일을 자동 설치하는 기능은 아닙니다.
 
@@ -49,7 +44,9 @@ Miruro / Re:ANIME의 현재 작품과 회차를 감지하고 한국어 자막을
 
 ```text
 Anissia 한국어 자막 → 바로 표시
-         ↓ 실제 파일 해석/다운로드/파싱 실패
+         ↓ 미등록/만료 또는 파일 해석·다운로드·파싱 실패
+웹 한국어 자막 폴백 검색 (Google CSE / 네이버 / DuckDuckGo + Wikidata 한글 제목) → 바로 표시
+         ↓ 실제 회차 파일 확보 실패
 Jimaku 일본어 자막 → 한국어 점진 번역
          ↓ 키 없음, HTTP 오류, 회차 파일 없음, 파일 파싱 실패
 Kitsunekko 미러 일본어 자막 → 한국어 점진 번역
@@ -106,9 +103,11 @@ Kitsunekko 미러 일본어 자막 → 한국어 점진 번역
 
 제작자별 최신 등록 회차가 현재 회차와 달라도 배포 페이지의 회차별 파일 또는 전체 ZIP을 확인합니다. 과거 회차는 파일명으로 해당 회차를 확인해야 적용합니다. 이전 TV 시즌 연결과 회차 수가 확인된 경우에만 시즌 회차와 누적 회차를 함께 허용합니다(예: 2기 12화 = 누적 24화).
 
-`website`는 배포 페이지일 수 있습니다. SMI / SRT / ASS / SSA / VTT / ZIP, 정적 파일 링크와 공개 Google Drive 파일 링크를 해석합니다. Blogspot의 최신 글에 요청 회차가 없으면 공개 글 목록에서 같은 작품·시즌의 이전 회차 글을 찾습니다. 통합 ZIP은 내부 파일명으로 요청 회차를 선택하며, 오래된 한글 ZIP 파일명과 `Lv1 미완성.ass`, `작품명 2 01.ass` 형식도 확인합니다. 본문의 폰트 링크와 다른 작품·시즌의 검색 결과는 제외합니다.
+`website`는 배포 페이지일 수 있습니다. SMI / SRT / ASS / SSA / VTT / ZIP, 정적 파일 링크와 공개 Google Drive 파일 링크, 그리고 **Blogspot · 티스토리 · 네이버 블로그** 전용 리졸버를 통해 회차별 첨부파일을 해석합니다. Blogspot·티스토리·네이버 블로그의 최신 글에 요청 회차가 없으면 블로그 내부 검색/피드에서 같은 작품·시즌의 이전 회차 글을 찾습니다. 통합·범위형 ZIP(`1~12화.zip`, `합본`, `완결` 등)은 내부 파일명에서 특전(OP/ED/PV)을 제외하고 요청 회차에 맞는 최적 자막을 자동 선택하며, 오래된 한글 ZIP 파일명과 `Lv1 미완성.ass`, `작품명 2 01.ass` 형식도 확인합니다. 본문의 폰트 링크와 다른 작품·시즌의 검색 결과는 제외합니다.
 
-Blogspot·티스토리·Google Drive 배포 host는 공개용에서도 필수 설치 권한입니다. 개인용에서는 새 외부 host도 추가 승인 없이 읽습니다. 공개용에서 미리 승인하지 않은 host가 필요하면 배포 페이지와 원인을 안내하고 다음 소스로 진행합니다. 모든 경로가 실패하면 설정 확인을 안내하며 권한 요청을 반복하지 않습니다. 로그인 전용 파일, Drive 폴더, 다운로드 제한, JavaScript로 생성되는 링크는 지원하지 않을 수 있습니다. Blogspot 이전 글 검색은 최대 100개 결과로 제한합니다.
+Anissia에 미등록되었거나 배포가 만료된 작품은 AI 번역으로 넘어가기 전 **웹 한국어 자막 폴백 검색**을 수행합니다. 한글 제목이 없는 구작은 AniList/MAL ID 및 원제를 바탕으로 **Wikidata**에서 공식 한국어 제목·별칭을 자동 조회(7일 캐싱)한 뒤, Google Custom Search JSON API(선택 설정)·네이버·DuckDuckGo 검색으로 자막 블로그를 찾아 회차별로 적용합니다.
+
+Blogspot·티스토리·네이버 블로그·Google Drive 배포 host는 공개용에서도 필수 설치 권한입니다. 개인용에서는 새 외부 host도 추가 승인 없이 읽습니다. 공개용에서 미리 승인하지 않은 host가 필요하면 배포 페이지와 원인을 안내하고 다음 소스로 진행합니다. 모든 경로가 실패하면 설정 확인을 안내하며 권한 요청을 반복하지 않습니다. 로그인 전용 파일, Drive 폴더, 다운로드 제한, JavaScript로 생성되는 링크는 지원하지 않을 수 있습니다. Blogspot 이전 글 검색은 최대 100개 결과로 제한합니다.
 
 ### Jimaku
 
