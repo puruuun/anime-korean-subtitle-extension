@@ -149,16 +149,16 @@ export function validateSettings(s: Settings) {
     d.japaneseFontSize > 72 ||
     d.japaneseOffset < -10 ||
     d.japaneseOffset > 10 ||
-    s.display.fontSize < 12 ||
-    s.display.fontSize > 72 ||
-    s.display.bottom < 0 ||
-    s.display.bottom > 50 ||
-    s.display.backgroundOpacity < 0 ||
-    s.display.backgroundOpacity > 1 ||
-    s.display.outline < 0 ||
-    s.display.outline > 6 ||
-    s.display.maxLines < 1 ||
-    s.display.maxLines > 8
+    d.fontSize < 12 ||
+    d.fontSize > 72 ||
+    d.bottom < 0 ||
+    d.bottom > 50 ||
+    d.backgroundOpacity < 0 ||
+    d.backgroundOpacity > 1 ||
+    d.outline < 0 ||
+    d.outline > 6 ||
+    d.maxLines < 1 ||
+    d.maxLines > 8
   )
     throw Error('자막 표시 설정 범위를 확인하세요.');
 }

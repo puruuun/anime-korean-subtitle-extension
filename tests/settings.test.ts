@@ -138,3 +138,28 @@ describe('Google Custom Search settings', () => {
     ).toThrow('자막 설정을 확인하세요.');
   });
 });
+
+describe('display validation with partial display settings', () => {
+  it('accepts omitted display fields via defaults and rejects out-of-range values on merged display', () => {
+    const partial = structuredClone(defaultSettings);
+    partial.display = { fontSize: 32 } as Settings['display'];
+    expect(() => validateSettings(partial)).not.toThrow();
+
+    for (const invalidDisplay of [
+      { fontSize: 11 },
+      { fontSize: 73 },
+      { bottom: -1 },
+      { bottom: 51 },
+      { backgroundOpacity: -0.1 },
+      { backgroundOpacity: 1.1 },
+      { outline: -1 },
+      { outline: 7 },
+      { maxLines: 0 },
+      { maxLines: 9 },
+    ]) {
+      const invalid = structuredClone(defaultSettings);
+      invalid.display = { ...invalidDisplay } as unknown as Settings['display'];
+      expect(() => validateSettings(invalid)).toThrow('자막 표시 설정 범위를 확인하세요.');
+    }
+  });
+});

@@ -33,6 +33,7 @@ import {
   videoFrames,
   supportedSite,
   sendVideoMessage,
+  forgetTabFrames,
 } from './frameManager';
 import {
   type JobStatus,
@@ -934,11 +935,21 @@ export async function updateOffset(tabId: number, value: number) {
 chrome.tabs.onRemoved.addListener((id) => {
   const j = jobs.get(id);
   j?.controller.abort();
+  j?.japaneseController?.abort();
   jobs.delete(id);
   epochs.delete(id);
   clearNavigationTimer(id);
+  const automatic = autoEpisodes.get(id);
+  if (automatic) automatic.stopped = true;
   autoEpisodes.delete(id);
+  forgetTabFrames(id);
   void (j?.writes ?? Promise.resolve()).then(() =>
-    chrome.storage.session.remove(['job:' + id, 'render:' + id, 'follow:' + id, 'automatic:' + id]),
+    chrome.storage.session.remove([
+      'job:' + id,
+      'render:' + id,
+      'follow:' + id,
+      'automatic:' + id,
+      'epoch:' + id,
+    ]),
   );
 });
