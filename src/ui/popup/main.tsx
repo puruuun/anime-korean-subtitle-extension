@@ -207,7 +207,7 @@ function Popup() {
           else {
             setEdit(preferences.mode !== 'auto');
             setContext({
-              site: tabUrl.includes('reanime.to') ? 'reanime' : 'miruro',
+              site: /reanime\.(?:to|cz)/i.test(tabUrl) ? 'reanime' : 'miruro',
               title: '',
               episode: 0,
               pageUrl: tabUrl,

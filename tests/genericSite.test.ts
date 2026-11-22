@@ -29,6 +29,7 @@ describe('site URL classification and adapter selection', () => {
     expect(isSpecializedSite('https://www.miruro.to/watch/frieren?ep=1')).toBe(true);
     expect(isSpecializedSite('https://miruro.to/watch/1')).toBe(true);
     expect(isSpecializedSite('https://reanime.to/watch/1')).toBe(true);
+    expect(isSpecializedSite('https://reanime.cz/watch/blue-box-season-2-3m552p?ep=1')).toBe(true);
     expect(isSpecializedSite('https://www.youtube.com/watch?v=abc')).toBe(false);
     expect(isSpecializedSite('not-a-url')).toBe(false);
 
@@ -47,6 +48,9 @@ describe('site URL classification and adapter selection', () => {
       'MiruroAdapter',
     );
     expect(adapterFor('https://reanime.to/watch/test', true)?.constructor.name).toBe(
+      'ReAnimeAdapter',
+    );
+    expect(adapterFor('https://reanime.cz/watch/test?ep=1', true)?.constructor.name).toBe(
       'ReAnimeAdapter',
     );
     expect(adapterFor('chrome://settings', true)).toBeUndefined();

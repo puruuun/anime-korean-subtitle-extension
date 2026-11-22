@@ -21,6 +21,16 @@ describe('observed site metadata', () => {
       title: 'Naruto',
       episode: 2,
     });
+    expect(
+      reanimeContext(
+        document,
+        'https://reanime.cz/watch/blue-box-season-2-3m552p?ep=1&lang=sub&server=HD-2',
+      ),
+    ).toMatchObject({
+      site: 'reanime',
+      title: 'Naruto',
+      episode: 1,
+    });
   });
   it('does not invent episode 1', () => {
     expect(() => miruroContext(document, 'https://www.miruro.to/watch/frieren')).toThrow('회차');

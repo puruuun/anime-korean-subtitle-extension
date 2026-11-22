@@ -4,7 +4,7 @@ import { findVideo } from '../../content/videoDetector';
 import { detectReAnimeSubtitles } from './subtitleDetector';
 export class ReAnimeAdapter implements SiteAdapter {
   matches(url: string) {
-    return new URL(url).hostname === 'reanime.to';
+    return /(^|\.)reanime\.(?:to|cz)$/.test(new URL(url).hostname);
   }
   async getAnimeContext() {
     return reanimeContext();
