@@ -1,6 +1,8 @@
 # Web Video Subtitle Extension
 
-웹 영상 사이트에서 원하는 언어의 자막을 지원하지 않을 때, **외부 자막 자동 검색·점진적 AI 번역·원문 동시 자막 오버레이**를 제공하는 Chrome Manifest V3 확장프로그램입니다.
+**한국어** | [English](README.en.md)
+
+웹 영상 사이트에서 원하는 언어의 자막을 지원하지 않을 때, **외부 자막 자동 검색·점진적 AI 번역·원문 동시 자막 오버레이**를 제공하는 크로스 브라우저 Manifest V3 확장프로그램입니다.
 
 > 영상·오디오 스트림은 다운로드하거나 전사하지 않고, 텍스트 기반 자막 파일만 처리합니다.
 
@@ -60,7 +62,8 @@
 
 ## 지원 현황 및 확장 방향
 
-- **현재 지원**: Miruro, Re:ANIME (+ `flixcloud.cc`, `strm.cx` 임베드 플레이어) 기반 한국어 자막 및 일본어 원문 동시 자막
+- **지원 브라우저**: Chrome / Edge / Brave(데스크톱), Firefox(데스크톱 · Android), Safari(macOS · iOS Web Extension)
+- **현재 지원 사이트**: Miruro, Re:ANIME (+ `flixcloud.cc`, `strm.cx` 임베드 플레이어) 기반 한국어 자막 및 일본어 원문 동시 자막
 - **확장 예정**: 더 다양한 웹 비디오 사이트 어댑터 및 사용자 지정 타겟 언어(다국어 자막) 지원 확대
 
 ---
@@ -79,9 +82,13 @@ Node.js 22 이상을 권장합니다.
 
 ```bash
 npm ci
-npm run check          # typecheck + unit tests + build
-npm run build:personal # 개인용 빌드 (dist/)
-npm run build:public   # 공개용 빌드 (dist/)
+npm run check                  # typecheck + unit tests + build
+npm run build:personal         # Chrome 개인용 빌드 (dist/)
+npm run build:public           # Chrome 공개용 빌드 (dist/)
+npm run build:firefox:personal # Firefox (데스크톱/Android) 개인용 빌드
+npm run build:safari:personal  # Safari (macOS/iOS) 개인용 빌드
 ```
+
+Firefox `.xpi` 및 iOS Safari Unsigned `.ipa` 패키지는 GitHub Actions의 `Build Mobile Packages (Firefox & iOS Safari)` 워크플로우에서 자동 생성할 수 있습니다.
 
 상세 검증 이력 및 기술 메모는 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
