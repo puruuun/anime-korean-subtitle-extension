@@ -39,12 +39,41 @@ export function filenameEpisode(
   const clean = name
     .replace(/\[[^\]]*\]|\([^)]*\)/g, ' ')
     .replace(/\b(?:season\s*\d+|\d+(?:st|nd|rd|th)\s*season|part\s*\d+|cour\s*\d+|s\d+)\b/gi, ' ');
-  const numbers = [...clean.matchAll(/(?:^|[\s._-])(\d+(?:\.\d+)?)(?=$|[\s._-])/g)]
+  const numbers = [...clean.matchAll(/(?:^|[\s_-]|(?<!\d)\.)(\d+(?:\.\d+)?)(?=$|[\s._-])/g)]
     .map((m) => normalizeEpisode(m[1])!)
     .filter((n) => Number(n) < 1900); // years, resolution and CRC must not become episodes
   if (numbers.length === 1) return { episode: numbers[0] };
   // Anissia's verified second-season archives sometimes name files "Title 2 01.ass".
   if (numbers.length === 2 && seasonHint && seasonHint > 1 && numbers[0] === String(seasonHint))
     return { season: seasonHint, episode: numbers[1] };
+  // Only fall back to attached/stripped trailing numbers when no standalone numbers were already ambiguous.
+  if (numbers.length > 0) return undefined;
+  const trailingClean = clean
+    .replace(
+      /\b(?:1080p|720p|480p|2160p|4k|x264|x265|h\.?264|h\.?265|hevc|av1|10bit|8bit|aac\d*(?:\.\d+)?|ddp\d*(?:\.\d+)?|ac3|mp4|mkv|webm|v\d+|web-?dl|webrip|bluray|bdrip|remux)\b/gi,
+      ' ',
+    )
+    .replace(/(?:제\s*)?\d+\s*기/g, ' ')
+    .replace(/\s*(?:자막|완결|수정본?|최종|v\d+)\s*$/gi, '')
+    .trim();
+  const cjkAttached = [
+    ...trailingClean.matchAll(
+      /[\p{Script=Hangul}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}](\d{1,3}(?:\.\d+)?)(?=$|[\s._-])/gu,
+    ),
+  ]
+    .map((m) => normalizeEpisode(m[1])!)
+    .filter((n) => Number(n) < 1900);
+  if (cjkAttached.length === 1) return { episode: cjkAttached[0] };
+  const trailingNumbers = [
+    ...trailingClean.matchAll(/(?:^|[\s_-]|(?<!\d)\.)(\d+(?:\.\d+)?)(?=$|[\s._-])/g),
+  ]
+    .map((m) => normalizeEpisode(m[1])!)
+    .filter((n) => Number(n) < 1900);
+  if (trailingNumbers.length === 1) return { episode: trailingNumbers[0] };
+  const latinAttached = trailingClean.match(/(?:^|[\s._-])[A-Za-z]{3,}(\d{1,3}(?:\.\d+)?)$/);
+  if (latinAttached) {
+    const ep = normalizeEpisode(latinAttached[1])!;
+    if (Number(ep) < 1900) return { episode: ep };
+  }
   return undefined;
 }

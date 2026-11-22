@@ -10,6 +10,7 @@ import { defaultSettings } from '../src/storage/settings';
 import { SelectionRequired } from '../src/subtitle/SubtitleSelection';
 import { AppError } from '../src/utils/errors';
 import { extractSubtitle } from '../src/subtitle/archive';
+import { filenameEpisode } from '../src/anime/episodeNormalizer';
 const c = {
   site: 'miruro' as const,
   title: 'You and I Are Polar Opposites Season 2',
@@ -221,5 +222,113 @@ describe('Anissia Korean acquisition regressions', () => {
       );
     await expect(pipe().resolve(c, 'ko')).rejects.toThrow('Anissia 연결 실패');
     expect((await pipe().resolve(c, 'auto')).source).toBe('embedded-en');
+  });
+  it('recognizes attached Korean/CJK/Latin episode numbers while ignoring codecs and years', () => {
+    expect(filenameEpisode('약사의 혼잣말01.ass', 3)).toEqual({ episode: '1' });
+    expect(filenameEpisode('약사의혼잣말08.ass', 3)).toEqual({ episode: '8' });
+    expect(filenameEpisode('약사의 혼잣말 3기01.ass', 3)).toEqual({ episode: '1' });
+    expect(filenameEpisode('푸른상자12.5.smi', 2)).toEqual({ episode: '12.5' });
+    expect(filenameEpisode('Frieren01.srt', 1)).toEqual({ episode: '1' });
+    expect(filenameEpisode('Show.1080p.x264.srt')).toBeUndefined();
+    expect(filenameEpisode('Show.2026.srt')).toBeUndefined();
+    expect(filenameEpisode('subtitle.srt')).toBeUndefined();
+  });
+  it('resolves earlier episode from Tistory blog when attachment omits space before episode number', async () => {
+    const apothecaryAnime = {
+      animeNo: 3356,
+      subject: '약사의 혼잣말 3기',
+      originalSubject: '薬屋のひとりごと 第3期',
+      startDate: '2026-10-03',
+      endDate: '',
+    };
+    const apothecaryContext = {
+      ...c,
+      site: 'reanime' as const,
+      title: 'The Apothecary Diaries Season 3',
+      englishTitle: 'The Apothecary Diaries Season 3',
+      nativeTitle: '薬屋のひとりごと 第3期',
+      koreanTitle: '약사의 혼잣말 3기',
+      season: 3,
+      episode: 1,
+      episodeOffset: undefined,
+      year: 2026,
+      pageUrl: 'https://reanime.cz/watch/the-apothecary-diaries-season-3-nkpfux?ep=1',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('/schedule/')
+          ? json([apothecaryAnime])
+          : json([
+              {
+                episode: '8',
+                name: '유진',
+                updDt: '2026-11-22T22:08:00',
+                website: 'https://yujin05.tistory.com/27',
+              },
+            ]),
+      ),
+    );
+    const chain = new SubtitleLinkResolverChain(undefined, async (url) => {
+      if (url === 'https://yujin05.tistory.com/27') {
+        return {
+          url,
+          headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+          bytes: strToU8(`<!doctype html><html><head>
+            <meta property="og:title" content="약사의 혼잣말 3기 8화 자막" />
+          </head><body>
+            <div class="contents_style">
+              <a href="https://blog.kakaocdn.net/dna/a/%EC%95%BD%EC%82%AC%EC%9D%98%20%ED%98%BC%EC%9E%A3%EB%A7%9008.ass">약사의 혼잣말08.ass 0.04MB</a>
+              <a href="https://blog.kakaocdn.net/dna/b/%ED%8F%B0%ED%8A%B8%ED%86%B5.zip">폰트통.zip 2.54MB</a>
+            </div>
+          </body></html>`),
+        };
+      }
+      if (url.startsWith('https://yujin05.tistory.com/search/')) {
+        return {
+          url,
+          headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+          bytes: strToU8(`<!doctype html><html><body>
+            <a href="/27">약사의 혼잣말 3기 8화 자막 본문 요약이 아주 길게 들어있는 카드 텍스트</a>
+            <a href="/5">약사의 혼잣말 3기 1화 자막 드디어 3기 시작이네요 2026.10.05 폰트1. a시네마M 2. a진지궁서 아주 긴 본문 발췌문</a>
+            <a href="/5">약사의 혼잣말 3기 1화 자막 2026.10.05 01:25</a>
+          </body></html>`),
+        };
+      }
+      if (url === 'https://yujin05.tistory.com/5') {
+        return {
+          url,
+          headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+          bytes: strToU8(`<!doctype html><html><head>
+            <meta property="og:title" content="약사의 혼잣말 3기 1화 자막" />
+          </head><body>
+            <div class="contents_style">
+              <a href="https://blog.kakaocdn.net/dna/c/%EC%95%BD%EC%82%AC%EC%9D%98%20%ED%98%BC%EC%9E%A3%EB%A7%9001.ass">약사의 혼잣말01.ass 0.04MB</a>
+              <a href="https://blog.kakaocdn.net/dna/d/%ED%8F%B0%ED%8A%B8%ED%86%B5.zip">폰트통.zip 2.54MB</a>
+            </div>
+          </body></html>`),
+        };
+      }
+      if (url.includes('%EC%95%BD%EC%82%AC%EC%9D%98%20%ED%98%BC%EC%9E%A3%EB%A7%9001.ass')) {
+        return {
+          url,
+          headers: new Headers({ 'content-type': 'text/plain; charset=utf-8' }),
+          bytes: strToU8(srt),
+        };
+      }
+      return {
+        url,
+        headers: new Headers({ 'content-type': 'text/plain; charset=utf-8' }),
+        bytes: strToU8(srt.replace('실제', '8화')),
+      };
+    });
+    const result = await new SubtitlePipeline(
+      [new AnissiaProvider(undefined, chain)],
+      defaultSettings,
+      vi.fn(),
+      new AbortController().signal,
+    ).resolve(apothecaryContext, 'auto');
+    expect(result.source).toBe('anissia');
+    expect(result.cues[0].text).toBe('한국어 실제 회차');
   });
 });
